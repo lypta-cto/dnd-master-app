@@ -26,7 +26,8 @@ const step = ref(0)
 const saving = ref(false)
 const createdId = ref<string | null>(null)
 
-const form = reactive({
+/** Kept separate so reopening the dialog can put the form back to it */
+const BLANK_FORM = {
   name: '',
   summary: '',
   campaign_type: 'one_shot' as CampaignType,
@@ -41,7 +42,9 @@ const form = reactive({
   dm_truth: '',
   dm_villain: '',
   dm_twist: ''
-})
+}
+
+const form = reactive({ ...BLANK_FORM })
 
 /* The table, built up on the last step and written once the campaign exists.
    A player without a character is normal (they'll make one); a character
@@ -49,10 +52,24 @@ const form = reactive({
 interface Seat {
   name: string
   character: string
+  /**
+   * What already exists on the server.
+   *
+   * The roster is written one seat at a time, and the request can fail —
+   * a dropped connection, a restarting API. When it does, the dialog stays
+   * open so the DM can try again, and without this the retry started from the
+   * first seat and created everything above the failure a second time. Five
+   * attempts left five copies of the first character and one of the last.
+   */
+  playerId?: string
+  characterCreated?: boolean
 }
 
 const seats = ref<Seat[]>([])
 const seatDraft = reactive({ name: '', character: '' })
+
+/** Same reason as the flags on a seat: a retry must not make a second one */
+const startCreated = ref(false)
 
 function addSeat() {
   const name = seatDraft.name.trim()
@@ -69,6 +86,31 @@ const start = reactive({ name: '', summary: '' })
 
 /* A goblin to throw and a tavern to throw it in */
 const starterPack = ref(true)
+
+/**
+ * The dialog is never unmounted, so it has to forget on its own.
+ *
+ * Without this it reopened exactly as it was left — including `createdId`,
+ * which makes `ensureCampaign` update rather than create. Opening it a second
+ * time to start a new campaign would quietly edit the first one and file the
+ * new table's players and characters under it.
+ */
+watch(open, (isOpen) => {
+  if (!isOpen) {
+    return
+  }
+
+  step.value = 0
+  createdId.value = null
+  startCreated.value = false
+  seats.value = []
+  seatDraft.name = ''
+  seatDraft.character = ''
+  starterPack.value = true
+  start.name = ''
+  start.summary = ''
+  Object.assign(form, BLANK_FORM)
+})
 
 const canContinue = computed(() => step.value > 0 || !!form.name.trim())
 
@@ -142,11 +184,15 @@ async function finish() {
   try {
     await ensureCampaign()
 
+    // Everything below runs again if an earlier attempt failed part-way, so
+    // each step records that it is done and the retry picks up where it
+    // stopped. The starter pack needs no flag of its own — the API skips names
+    // that are already there.
     if (starterPack.value) {
       await campaigns.installStarterPack()
     }
 
-    if (start.name.trim()) {
+    if (start.name.trim() && !startCreated.value) {
       // Shared: where you are isn't a secret from the party
       await entities.create({
         type: 'location',
@@ -154,20 +200,24 @@ async function finish() {
         summary: start.summary.trim() || null,
         visibility: 'shared'
       })
+      startCreated.value = true
     }
 
     // Sequential on purpose: the roster keeps the order they were typed in
     for (const seat of seats.value) {
-      const player = await players.create({ name: seat.name })
+      if (!seat.playerId) {
+        seat.playerId = (await players.create({ name: seat.name })).id
+      }
 
-      if (seat.character) {
+      if (seat.character && !seat.characterCreated) {
         await entities.create({
           type: 'character',
           name: seat.character,
-          player_id: player.id,
+          player_id: seat.playerId,
           visibility: 'shared',
           data: { level: form.starting_level }
         })
+        seat.characterCreated = true
       }
     }
 
@@ -181,7 +231,14 @@ async function finish() {
     open.value = false
     await navigateTo('/')
   } catch (error) {
-    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+    toast.add({
+      title: apiErrorMessage(error),
+      // The DM's next move is to press it again, and they should know that
+      // costs them nothing — everything already written stays written.
+      description: 'Nothing was lost. Try again and it picks up where it stopped.',
+      icon: 'i-lucide-circle-alert',
+      color: 'error'
+    })
   } finally {
     saving.value = false
   }
