@@ -15,6 +15,40 @@ const entities = useEntities()
 const cast = useCast()
 const mediaUrl = useMediaUrl()
 
+/* Drawing from the page, when a key is configured */
+const ai = useAi()
+const aiImages = ref(false)
+const illustrating = ref(false)
+
+onMounted(async () => {
+  if (!isDm.value) {
+    return
+  }
+  try {
+    aiImages.value = (await ai.status()).images
+  } catch {
+    aiImages.value = false
+  }
+})
+
+async function illustrate() {
+  illustrating.value = true
+  try {
+    const image = await ai.illustrate(props.entity.id)
+    gallery.value = [...gallery.value, image]
+
+    if (!props.entity.image_url) {
+      emit('coverChanged', image.url)
+    }
+
+    toast.add({ title: 'Illustration added', icon: 'i-lucide-sparkles', color: 'success' })
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    illustrating.value = false
+  }
+}
+
 const input = useTemplateRef<HTMLInputElement>('input')
 const gallery = ref<EntityImage[]>([])
 const loading = ref(true)
@@ -226,6 +260,20 @@ async function removeOne(image: EntityImage) {
         size="sm"
         @click="pickFocus"
       />
+      <UTooltip
+        v-if="aiImages"
+        text="Draws what the description says"
+      >
+        <UButton
+          label="Illustrate"
+          icon="i-lucide-sparkles"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          :loading="illustrating"
+          @click="illustrate"
+        />
+      </UTooltip>
       <UButton
         label="Add images"
         icon="i-lucide-image-plus"

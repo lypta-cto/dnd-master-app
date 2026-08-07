@@ -10,8 +10,10 @@
 const open = defineModel<boolean>('open', { default: false })
 
 const toast = useToast()
-const { create, update, currentId } = useCampaigns()
+const campaigns = useCampaigns()
+const { create, update, currentId } = campaigns
 const players = usePlayers()
+const entities = useEntities()
 
 const STEPS = [
   { title: 'The game', hint: 'What kind of thing are we playing?' },
@@ -41,18 +43,32 @@ const form = reactive({
   dm_twist: ''
 })
 
-/* Names typed on the last step, added once the campaign exists */
-const names = ref<string[]>([])
-const nameDraft = ref('')
+/* The table, built up on the last step and written once the campaign exists.
+   A player without a character is normal (they'll make one); a character
+   without a player is not, so the two are entered together. */
+interface Seat {
+  name: string
+  character: string
+}
 
-function addName() {
-  const name = nameDraft.value.trim()
+const seats = ref<Seat[]>([])
+const seatDraft = reactive({ name: '', character: '' })
+
+function addSeat() {
+  const name = seatDraft.name.trim()
   if (!name) {
     return
   }
-  names.value = [...names.value, name]
-  nameDraft.value = ''
+  seats.value = [...seats.value, { name, character: seatDraft.character.trim() }]
+  seatDraft.name = ''
+  seatDraft.character = ''
 }
+
+/* Somewhere for the party to be standing when the game starts */
+const start = reactive({ name: '', summary: '' })
+
+/* A goblin to throw and a tavern to throw it in */
+const starterPack = ref(true)
 
 const canContinue = computed(() => step.value > 0 || !!form.name.trim())
 
@@ -126,16 +142,38 @@ async function finish() {
   try {
     await ensureCampaign()
 
-    if (names.value.length) {
-      // Sequential on purpose: the roster keeps the order they were typed in
-      for (const name of names.value) {
-        await players.create({ name })
+    if (starterPack.value) {
+      await campaigns.installStarterPack()
+    }
+
+    if (start.name.trim()) {
+      // Shared: where you are isn't a secret from the party
+      await entities.create({
+        type: 'location',
+        name: start.name.trim(),
+        summary: start.summary.trim() || null,
+        visibility: 'shared'
+      })
+    }
+
+    // Sequential on purpose: the roster keeps the order they were typed in
+    for (const seat of seats.value) {
+      const player = await players.create({ name: seat.name })
+
+      if (seat.character) {
+        await entities.create({
+          type: 'character',
+          name: seat.character,
+          player_id: player.id,
+          visibility: 'shared',
+          data: { level: form.starting_level }
+        })
       }
     }
 
     toast.add({
       title: `“${form.name.trim()}” is ready`,
-      description: names.value.length ? `${names.value.length} at the table.` : undefined,
+      description: seats.value.length ? `${seats.value.length} at the table.` : undefined,
       icon: 'i-lucide-swords',
       color: 'success'
     })
@@ -306,6 +344,26 @@ async function createNow() {
             class="w-full"
           />
         </UFormField>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UFormField
+            label="Where it starts"
+            help="Created as a shared location — the party knows where they are."
+          >
+            <UInput
+              v-model="start.name"
+              placeholder="Vranov Brod"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="In a line">
+            <UInput
+              v-model="start.summary"
+              placeholder="A valley village that locks its doors at dusk."
+              class="w-full"
+            />
+          </UFormField>
+        </div>
       </div>
 
       <!-- 3. The truth -->
@@ -370,16 +428,26 @@ async function createNow() {
 
         <form
           class="flex items-end gap-2"
-          @submit.prevent="addName"
+          @submit.prevent="addSeat"
         >
           <UFormField
-            label="Add a player"
+            label="Player"
             class="flex-1"
           >
             <UInput
-              v-model="nameDraft"
+              v-model="seatDraft.name"
               placeholder="Ana"
               autofocus
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField
+            label="Their character"
+            class="flex-1"
+          >
+            <UInput
+              v-model="seatDraft.character"
+              placeholder="Arannis"
               class="w-full"
             />
           </UFormField>
@@ -388,32 +456,52 @@ async function createNow() {
             icon="i-lucide-user-plus"
             color="neutral"
             variant="outline"
-            :disabled="!nameDraft.trim()"
+            :disabled="!seatDraft.name.trim()"
             aria-label="Add"
           />
         </form>
 
-        <div
-          v-if="names.length"
-          class="flex flex-wrap gap-1.5"
+        <ul
+          v-if="seats.length"
+          class="space-y-1"
         >
-          <UBadge
-            v-for="(name, index) in names"
-            :key="`${name}-${index}`"
-            :label="name"
-            color="neutral"
-            variant="subtle"
-            size="lg"
-            class="cursor-pointer"
-            @click="names = names.filter((_, i) => i !== index)"
-          />
-        </div>
+          <li
+            v-for="(seat, index) in seats"
+            :key="`${seat.name}-${index}`"
+            class="flex items-center gap-2 rounded-lg border border-default px-2 py-1.5"
+          >
+            <span class="text-sm font-medium text-highlighted">{{ seat.name }}</span>
+            <span
+              v-if="seat.character"
+              class="truncate text-sm text-muted"
+            >plays {{ seat.character }}</span>
+            <span
+              v-else
+              class="text-sm text-dimmed"
+            >character later</span>
+            <UButton
+              icon="i-lucide-x"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              class="ml-auto"
+              :aria-label="`Remove ${seat.name}`"
+              @click="seats = seats.filter((_, i) => i !== index)"
+            />
+          </li>
+        </ul>
         <p
           v-else
           class="text-sm text-dimmed"
         >
           Nobody yet — you can also do this later on the campaign page.
         </p>
+
+        <USwitch
+          v-model="starterPack"
+          label="Add a starter set"
+          description="Ten stock monsters and six places to rename — so the first session isn't a blank page."
+        />
       </div>
     </template>
 

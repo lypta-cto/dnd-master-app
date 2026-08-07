@@ -29,9 +29,31 @@ interface ResourceRow {
   reset: 'short' | 'long'
 }
 
+const ABILITIES = [
+  { key: 'str', label: 'STR' },
+  { key: 'dex', label: 'DEX' },
+  { key: 'con', label: 'CON' },
+  { key: 'int', label: 'INT' },
+  { key: 'wis', label: 'WIS' },
+  { key: 'cha', label: 'CHA' }
+] as const
+
+/** The one bit of arithmetic worth doing for them: (score − 10) / 2, rounded down */
+function modifier(score: number | undefined) {
+  if (!score) {
+    return null
+  }
+  const value = Math.floor((score - 10) / 2)
+  return value >= 0 ? `+${value}` : `${value}`
+}
+
 interface SheetData {
   level: number
   ac: number
+  speed: string
+  initiative: number
+  hit_dice: string
+  abilities: Record<string, number>
   max_hp: number
   current_hp: number
   temp_hp: number
@@ -53,6 +75,10 @@ function fromData(data: Record<string, unknown>): SheetData {
   return {
     level: Number(d.level) || 1,
     ac: Number(d.ac) || 10,
+    speed: String(d.speed ?? ''),
+    initiative: Number(d.initiative) || 0,
+    hit_dice: String(d.hit_dice ?? ''),
+    abilities: { ...(d.abilities ?? {}) },
     max_hp: Number(d.max_hp) || 10,
     current_hp: d.current_hp === undefined ? Number(d.max_hp) || 10 : Number(d.current_hp),
     temp_hp: Number(d.temp_hp) || 0,
@@ -303,6 +329,68 @@ function setDeathSave(kind: 's' | 'f', index: number) {
             v-model="sheet.max_hp"
             :min="1"
             :max="999"
+            :disabled="!canEdit"
+            class="w-full"
+          />
+        </UFormField>
+      </div>
+
+      <!-- Ability scores: the numbers you're asked for mid-scene -->
+      <div>
+        <p class="mb-1.5 text-sm font-medium text-highlighted">
+          Ability scores
+        </p>
+        <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div
+            v-for="ability in ABILITIES"
+            :key="ability.key"
+            class="rounded-xl border border-default p-2 text-center"
+          >
+            <p class="text-xs font-medium uppercase tracking-wide text-dimmed">
+              {{ ability.label }}
+            </p>
+            <UInputNumber
+              :model-value="sheet.abilities[ability.key] ?? undefined"
+              :min="1"
+              :max="30"
+              :disabled="!canEdit"
+              size="xs"
+              class="mt-1 w-full"
+              :aria-label="ability.label"
+              @update:model-value="value => (sheet.abilities = { ...sheet.abilities, [ability.key]: value ?? 0 })"
+            />
+            <p class="mt-0.5 text-xs tabular-nums text-muted">
+              {{ modifier(sheet.abilities[ability.key]) ?? '—' }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-3">
+        <UFormField label="Speed">
+          <UInput
+            v-model="sheet.speed"
+            placeholder="30 ft."
+            :disabled="!canEdit"
+            class="w-full"
+          />
+        </UFormField>
+        <UFormField label="Initiative">
+          <UInputNumber
+            v-model="sheet.initiative"
+            :min="-5"
+            :max="20"
+            :disabled="!canEdit"
+            class="w-full"
+          />
+        </UFormField>
+        <UFormField
+          label="Hit dice"
+          help="What a short rest spends."
+        >
+          <UInput
+            v-model="sheet.hit_dice"
+            placeholder="3d8"
             :disabled="!canEdit"
             class="w-full"
           />

@@ -19,6 +19,44 @@ const meta = computed(() => entityTypeMeta(props.type))
 
 const typeFields = computed(() => TYPE_FIELDS[props.type] ?? [])
 
+/* Drafting help, when a key is configured */
+const ai = useAi()
+const aiText = ref(false)
+const drafting = ref(false)
+
+onMounted(async () => {
+  if (!isDm.value) {
+    return
+  }
+  try {
+    aiText.value = (await ai.status()).text
+  } catch {
+    aiText.value = false
+  }
+})
+
+async function draftBody() {
+  if (!form.name.trim() || drafting.value) {
+    return
+  }
+
+  drafting.value = true
+  try {
+    // The summary is the DM's own brief — the draft is built around it
+    const { text } = await ai.draft({
+      type: props.type,
+      name: form.name.trim(),
+      brief: form.summary.trim() || null
+    })
+    // Never overwrite: a draft lands under whatever they already wrote
+    form.body = form.body.trim() ? `${form.body.trim()}\n\n${text}` : text
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    drafting.value = false
+  }
+}
+
 /* Characters belong to someone at the table — the DM says who */
 const players = usePlayers()
 const roster = ref<Player[]>([])
@@ -165,6 +203,21 @@ async function submit() {
       label="Body"
       help="Markdown. Write [[Entity Name]] to link — links resolve on save, and unresolved names are reported, not lost."
     >
+      <template
+        v-if="aiText"
+        #hint
+      >
+        <UButton
+          label="Draft it"
+          icon="i-lucide-sparkles"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :loading="drafting"
+          :disabled="!form.name.trim()"
+          @click="draftBody"
+        />
+      </template>
       <UTextarea
         v-model="form.body"
         :rows="14"

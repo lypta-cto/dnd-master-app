@@ -244,6 +244,26 @@ najgori mogući trenutak da kaskada odnese ekran DM-u.
 
 Time je zaokruženo sve što smo planirali pre Neona.
 
+## Korak 6: prazna kampanja više ne počinje ni od čega ✓
+
+- **Wizard**: na koraku „The table" se uz igrača odmah unosi i **ime njegovog
+  lika** (pravi se sa startnim nivoom kampanje), dodata je i **početna lokacija**
+  („Where it starts", kreira se kao shared), i **starter set** — deset generičkih
+  monstruma i šest tipskih mesta za preimenovanje. Ponovno pokretanje je bezbedno:
+  ono što si već imenovao se preskače.
+- **Sheet**: šest ability score-ova sa automatski izračunatim modifikatorom,
+  speed, initiative i hit dice.
+- **AI ispomoć** (radi samo ako postoji `OPENAI_API_KEY`, inače se dugmad ne
+  prikazuju): **„Draft it"** u formi entiteta piše prvi nacrt tela na osnovu
+  imena i summary-ja, i **„Illustrate"** u galeriji crta ono što u opisu **već
+  piše** i ubacuje sliku kao običnu galerijsku (cover, caption, redosled i
+  brisanje rade normalno).
+
+Prompti traže ono što se koristi za stolom (šta se primećuje, ko šta hoće) a ne
+atmosferu, nose premise i ton kampanje, i završavaju se pravilom o jeziku — bez
+toga je na srpski brief vraćao engleski tekst. Tekst i slike su odvojeni moduli
+jer različito otkazuju i različito koštaju.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,

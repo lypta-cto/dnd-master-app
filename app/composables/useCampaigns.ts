@@ -151,6 +151,10 @@ export function useCampaigns() {
     return campaign
   }
 
+  /** Stock an empty campaign with something to throw and somewhere to throw it */
+  const installStarterPack = () =>
+    api.post<{ message: string }>(`/campaigns/${currentId.value}/starter-pack`, {})
+
   async function remove(id: string) {
     await api.del(`/campaigns/${id}`)
     campaigns.value = campaigns.value.filter(c => c.id !== id)
@@ -181,6 +185,7 @@ export function useCampaigns() {
     create,
     update,
     remove,
+    installStarterPack,
     detail,
     rotateDisplayToken,
     members,
