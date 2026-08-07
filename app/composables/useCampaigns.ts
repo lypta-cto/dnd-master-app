@@ -1,5 +1,33 @@
 export type CampaignRole = 'dm' | 'player'
 
+export type CampaignType = 'one_shot' | 'mini' | 'campaign'
+
+/**
+ * The campaign's setup, stored in one JSONB field.
+ *
+ * `dm_` keys never reach a player — the API strips them — so the truth can sit
+ * next to the premise the party gets told.
+ */
+export interface CampaignData {
+  campaign_type?: CampaignType
+  system?: string
+  player_count?: number
+  starting_level?: number
+  duration?: string
+  genre?: string
+  tone?: string
+  /** What the players think this is about */
+  premise?: string
+  /** Read this out at the table to start */
+  player_intro?: string
+  /** What is actually going on */
+  dm_truth?: string
+  /** Who or what drives it */
+  dm_villain?: string
+  /** The reveal that recolours everything before it */
+  dm_twist?: string
+}
+
 export interface Campaign {
   id: string
   name: string
@@ -7,8 +35,18 @@ export interface Campaign {
   summary: string | null
   owner_id: string
   created_at: string
+  data: CampaignData
   my_role: CampaignRole | null
 }
+
+export const CAMPAIGN_TYPES: { value: CampaignType, label: string, hint: string }[] = [
+  { value: 'one_shot', label: 'One-shot', hint: 'One evening, start to finish' },
+  { value: 'mini', label: 'Mini campaign', hint: 'A handful of sessions' },
+  { value: 'campaign', label: 'Campaign', hint: 'Open-ended' }
+]
+
+export const TONES = ['heroic', 'grim', 'dark', 'comedic', 'mysterious', 'epic']
+export const GENRES = ['fantasy', 'horror', 'mystery', 'adventure', 'intrigue', 'exploration']
 
 export interface CampaignDetail extends Campaign {
   display_token: string | null
@@ -38,10 +76,28 @@ export function useCampaigns() {
   const campaigns = useState<Campaign[]>('campaigns', () => [])
   const loaded = useState<boolean>('campaigns-loaded', () => false)
 
-  const currentId = useCookie<string | null>('campaign-id', {
+  /**
+   * The selected campaign: shared state, persisted to a cookie.
+   *
+   * The cookie alone isn't enough — `useCookie` hands every caller its own ref,
+   * so switching campaigns in the sidebar left the dashboard watching a ref
+   * that never changed, still showing the campaign you just left. `useState` is
+   * shared app-wide; the cookie is only how the choice survives a reload.
+   */
+  const cookie = useCookie<string | null>('campaign-id', {
     default: () => null,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 365
+  })
+
+  const storedId = useState<string | null>('campaign-id', () => cookie.value)
+
+  const currentId = computed({
+    get: () => storedId.value,
+    set: (id: string | null) => {
+      storedId.value = id
+      cookie.value = id
+    }
   })
 
   const current = computed(() => campaigns.value.find(c => c.id === currentId.value) ?? null)
@@ -79,14 +135,17 @@ export function useCampaigns() {
     loaded.value = false
   }
 
-  async function create(payload: { name: string, summary?: string | null }) {
+  async function create(payload: { name: string, summary?: string | null, data?: CampaignData }) {
     const campaign = await api.post<CampaignDetail>('/campaigns', payload)
     campaigns.value = [campaign, ...campaigns.value]
     currentId.value = campaign.id
     return campaign
   }
 
-  async function update(id: string, payload: { name?: string, summary?: string | null }) {
+  async function update(
+    id: string,
+    payload: { name?: string, summary?: string | null, data?: CampaignData }
+  ) {
     const campaign = await api.patch<CampaignDetail>(`/campaigns/${id}`, payload)
     campaigns.value = campaigns.value.map(c => (c.id === id ? { ...c, ...campaign } : c))
     return campaign

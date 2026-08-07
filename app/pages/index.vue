@@ -387,6 +387,6 @@ function sessionLabel(session: EntitySummary) {
       </template>
     </template>
 
-    <CampaignFormModal v-model:open="creating" />
+    <CampaignWizard v-model:open="creating" />
   </AppPage>
 </template>

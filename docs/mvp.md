@@ -157,9 +157,32 @@ U UI-ju: „The table" na Campaign stranici (brzi unos imena, meni po redu za
 Edit / Invite / Remove), izbor igrača u formi lika, i „played by …" na Party
 stranici.
 
-Sledeće po dogovoru: metapodaci kampanje (`campaign.data`) + wizard za otvaranje
-(naziv → premise → truth → villain → twist), pa DM-only polja („igrači misle X,
-istina je Y"), pa scene/encounter/clue, pa run mode.
+## Korak 2: metapodaci i otvaranje kampanje ✓
+
+Kampanja je dobila `data` JSONB (isti obrazac kao entiteti): tip (one-shot /
+mini / campaign), sistem, broj igrača, starting level, očekivano trajanje, žanr,
+ton — i kičmu priče: premise, DM truth, villain, twist, plus tekst za čitanje
+igračima na početku.
+
+Ključno: **`dm_` ključevi se skidaju na izlazu iz API-ja** (`visible_data`), pa
+istina stoji odmah pored premise u bazi a nikad ne putuje sa njom. Radi se na
+granici serijalizacije, ne po ekranu, da nijedna buduća stranica ne može da ih
+procuri time što je zaboravila da filtrira — isti argument kao `visibility_filter`
+jedan nivo niže.
+
+**Wizard** za otvaranje kampanje ima četiri koraka koja prate kako se o kampanji
+zaista razmišlja: The game → The premise → The truth → The table. Sve posle imena
+može da se preskoči („Create now"), a poslednji korak odmah unese ljude za stolom.
+Ista podešavanja se posle menjaju na Campaign stranici; igrač tamo vidi samo
+premise i format.
+
+Usput popravljeno: izbor kampanje je bio `useCookie`, koji svakom pozivaocu daje
+svoj ref — pa je promena kampanje u sidebar-u ostavljala dashboard na staroj
+(družina i brojači prethodne kampanje). Sad je deljeni `useState`, a kolačić je
+samo trajnost.
+
+Sledeće po dogovoru: DM-only polja na entitetima („igrači misle X, istina je Y"),
+pa scene/encounter/clue, pa run mode.
 
 ### Namerno van plana (za sada)
 

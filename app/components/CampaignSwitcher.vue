@@ -47,5 +47,5 @@ const items = computed<DropdownMenuItem[][]>(() => [
     </UButton>
   </UDropdownMenu>
 
-  <CampaignFormModal v-model:open="creating" />
+  <CampaignWizard v-model:open="creating" />
 </template>

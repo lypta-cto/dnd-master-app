@@ -13,6 +13,34 @@ const { user } = useAuth()
 const mediaUrl = useMediaUrl()
 
 const form = reactive({ name: '', summary: '' })
+
+/* The setup: what kind of game, what the party is told, and the truth under it */
+const setup = ref<CampaignData>({})
+const savingSetup = ref(false)
+
+function loadSetup() {
+  setup.value = { ...(current.value?.data ?? {}) }
+}
+
+async function saveSetup() {
+  if (!current.value) {
+    return
+  }
+
+  savingSetup.value = true
+  try {
+    // Blank fields shouldn't linger as empty strings in the record
+    const data = Object.fromEntries(
+      Object.entries(setup.value).filter(([, value]) => value !== '' && value != null)
+    ) as CampaignData
+    await update(current.value.id, { data })
+    toast.add({ title: 'Setup saved', icon: 'i-lucide-circle-check', color: 'success' })
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    savingSetup.value = false
+  }
+}
 const saving = ref(false)
 
 const members = ref<CampaignMember[]>([])
@@ -25,6 +53,7 @@ async function load() {
 
   form.name = current.value.name
   form.summary = current.value.summary ?? ''
+  loadSetup()
 
   membersLoading.value = true
   try {
@@ -167,6 +196,136 @@ async function destroyCampaign() {
           </div>
         </ContentCard>
 
+        <!-- The setup, in the order the wizard asks for it -->
+        <ContentCard
+          v-if="isDm"
+          title="The game"
+          icon="i-lucide-dices"
+          description="What kind of thing this is, what the party is told, and what's really going on."
+        >
+          <template #actions>
+            <UButton
+              label="Save"
+              size="sm"
+              :loading="savingSetup"
+              @click="saveSetup"
+            />
+          </template>
+
+          <div class="space-y-5">
+            <div class="grid gap-4 sm:grid-cols-3">
+              <UFormField label="Kind of game">
+                <USelectMenu
+                  v-model="setup.campaign_type"
+                  :items="CAMPAIGN_TYPES"
+                  value-key="value"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="System">
+                <UInput
+                  v-model="setup.system"
+                  placeholder="D&D 5e"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Expected length">
+                <UInput
+                  v-model="setup.duration"
+                  placeholder="5–6h"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-4">
+              <UFormField label="Players">
+                <UInputNumber
+                  v-model="setup.player_count"
+                  :min="1"
+                  :max="12"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Starting level">
+                <UInputNumber
+                  v-model="setup.starting_level"
+                  :min="1"
+                  :max="20"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Genre">
+                <UInputMenu
+                  v-model="setup.genre"
+                  :items="GENRES"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Tone">
+                <UInputMenu
+                  v-model="setup.tone"
+                  :items="TONES"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
+            <UFormField
+              label="Premise"
+              help="What the party believes they're walking into. They can read this."
+            >
+              <UTextarea
+                v-model="setup.premise"
+                :rows="2"
+                class="w-full"
+              />
+            </UFormField>
+
+            <UFormField
+              label="Opening lines"
+              help="What you read out to start."
+            >
+              <UTextarea
+                v-model="setup.player_intro"
+                :rows="2"
+                class="w-full"
+              />
+            </UFormField>
+
+            <div class="space-y-4 rounded-xl border border-default p-4">
+              <p class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                <UIcon
+                  name="i-lucide-eye-off"
+                  class="size-4 text-dimmed"
+                />
+                Yours only — the API never sends this to a player
+              </p>
+
+              <UFormField label="What is actually going on">
+                <UTextarea
+                  v-model="setup.dm_truth"
+                  :rows="2"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="Who drives it">
+                <UInput
+                  v-model="setup.dm_villain"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="The turn">
+                <UTextarea
+                  v-model="setup.dm_twist"
+                  :rows="2"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+          </div>
+        </ContentCard>
+
         <!-- What a player needs from this page: what we're playing, and who with -->
         <ContentCard
           v-if="!isDm"
@@ -179,6 +338,41 @@ async function destroyCampaign() {
           <p class="mt-1 text-sm text-muted">
             {{ current.summary || 'Your DM hasn\'t written a summary yet.' }}
           </p>
+
+          <p
+            v-if="current.data.premise"
+            class="mt-3 text-sm text-toned"
+          >
+            {{ current.data.premise }}
+          </p>
+
+          <dl
+            v-if="current.data.system || current.data.campaign_type"
+            class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm"
+          >
+            <div
+              v-if="current.data.campaign_type"
+              class="flex gap-2"
+            >
+              <dt class="text-muted">
+                Format
+              </dt>
+              <dd class="text-toned">
+                {{ CAMPAIGN_TYPES.find(t => t.value === current!.data.campaign_type)?.label }}
+              </dd>
+            </div>
+            <div
+              v-if="current.data.system"
+              class="flex gap-2"
+            >
+              <dt class="text-muted">
+                System
+              </dt>
+              <dd class="text-toned">
+                {{ current.data.system }}
+              </dd>
+            </div>
+          </dl>
         </ContentCard>
 
         <PlayerRoster :is-dm="isDm" />
