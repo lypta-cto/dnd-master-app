@@ -31,17 +31,40 @@ onMounted(async () => {
   }
 })
 
-async function illustrate() {
+/**
+ * Two price points, because the DM is spending real money a cent at a time.
+ * Draft is the default and is genuinely usable — the difference between the
+ * tiers is much smaller than the difference a good prompt makes.
+ */
+const QUALITIES = [
+  { value: 'draft' as const, label: 'Draft', hint: 'about 1¢' },
+  { value: 'good' as const, label: 'Good', hint: 'about 4¢, sharper' }
+]
+
+const illustrateMenu = computed(() =>
+  QUALITIES.map(quality => ({
+    label: `${quality.label} — ${quality.hint}`,
+    icon: 'i-lucide-sparkles',
+    onSelect: () => illustrate(quality.value)
+  }))
+)
+
+async function illustrate(quality: 'draft' | 'good') {
   illustrating.value = true
   try {
-    const image = await ai.illustrate(props.entity.id)
+    const image = await ai.illustrate(props.entity.id, { quality })
     gallery.value = [...gallery.value, image]
 
     if (!props.entity.image_url) {
       emit('coverChanged', image.url)
     }
 
-    toast.add({ title: 'Illustration added', icon: 'i-lucide-sparkles', color: 'success' })
+    // The provider's own figure, not our estimate of it
+    toast.add({
+      title: `Illustration added — ${image.cents.toFixed(2)}¢`,
+      icon: 'i-lucide-sparkles',
+      color: 'success'
+    })
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
@@ -260,20 +283,20 @@ async function removeOne(image: EntityImage) {
         size="sm"
         @click="pickFocus"
       />
-      <UTooltip
+      <UDropdownMenu
         v-if="aiImages"
-        text="Draws what the description says"
+        :items="illustrateMenu"
       >
         <UButton
           label="Illustrate"
           icon="i-lucide-sparkles"
+          trailing-icon="i-lucide-chevron-down"
           color="neutral"
           variant="outline"
           size="sm"
           :loading="illustrating"
-          @click="illustrate"
         />
-      </UTooltip>
+      </UDropdownMenu>
       <UButton
         label="Add images"
         icon="i-lucide-image-plus"

@@ -1,17 +1,17 @@
 export interface AiStatus {
-  /** Claude, for drafting prose */
+  /** Drafting prose */
   text: boolean
-  /** A separate provider — Anthropic has no image generation */
+  /** Drawing what the page already says */
   images: boolean
 }
 
 /**
  * Drafting help, when it's switched on.
  *
- * Both halves need their own key, so the UI asks once per campaign what's
- * available and hides what isn't — a button that always errors is worse than no
- * button. Nothing here writes prose into an entity on its own: a draft comes
- * back to the form and the DM decides whether to keep it.
+ * It needs a key, so the UI asks once per campaign what's available and hides
+ * what isn't — a button that always errors is worse than no button. Nothing
+ * here writes prose into an entity on its own: a draft comes back to the form
+ * and the DM decides whether to keep it.
  */
 export function useAi() {
   const api = useApi()
@@ -34,8 +34,19 @@ export function useAi() {
   }) => api.post<{ text: string }>(`${base()}/draft`, payload)
 
   /** Draws what's already written and files it in the entity's gallery */
-  const illustrate = (entityId: string, payload: { extra?: string | null, caption?: string | null } = {}) =>
-    api.post<EntityImage>(`${base()}/entities/${entityId}/illustrate`, payload)
+  const illustrate = (
+    entityId: string,
+    payload: {
+      extra?: string | null
+      caption?: string | null
+      /** Cheap by default; `good` costs roughly four times as much */
+      quality?: 'draft' | 'good'
+    } = {}
+  ) =>
+    api.post<EntityImage & { cents: number }>(
+      `${base()}/entities/${entityId}/illustrate`,
+      payload
+    )
 
   return { status, draft, illustrate }
 }

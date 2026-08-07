@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { mainNav, footerNav } = useNavigation()
+const { mainNav, footerNav, activeSection } = useNavigation()
 const { logout } = useAuth()
 
 // Tracked here so the footer can be centred in the collapsed rail
@@ -49,6 +49,7 @@ const collapsed = ref(false)
       <CampaignSwitcher :collapsed="isCollapsed" />
 
       <UNavigationMenu
+        :key="activeSection"
         :items="mainNav"
         :collapsed="isCollapsed"
         orientation="vertical"
