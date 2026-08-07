@@ -1,6 +1,6 @@
-export type EntityType = 'npc' | 'character' | 'location' | 'item' | 'faction' | 'note' | 'session' | 'quest' | 'monster' | 'map'
+export type EntityType = 'npc' | 'character' | 'location' | 'item' | 'faction' | 'note' | 'session' | 'quest' | 'monster' | 'map' | 'scene' | 'encounter' | 'clue'
 export type Visibility = 'dm_only' | 'shared' | 'public'
-export type LinkRelation = 'mentions' | 'member_of' | 'located_in' | 'owns' | 'related_to'
+export type LinkRelation = 'mentions' | 'member_of' | 'located_in' | 'owns' | 'related_to' | 'leads_to'
 
 export interface EntitySummary {
   id: string
@@ -93,6 +93,9 @@ export const ENTITY_TYPES: {
   { value: 'monster', label: 'Monster', plural: 'Monsters', icon: 'i-lucide-skull' },
   { value: 'map', label: 'Map', plural: 'Maps', icon: 'i-lucide-map' },
   { value: 'quest', label: 'Quest', plural: 'Quests', icon: 'i-lucide-target' },
+  { value: 'scene', label: 'Scene', plural: 'Scenes', icon: 'i-lucide-clapperboard' },
+  { value: 'encounter', label: 'Encounter', plural: 'Encounters', icon: 'i-lucide-swords' },
+  { value: 'clue', label: 'Clue', plural: 'Clues', icon: 'i-lucide-search' },
   { value: 'session', label: 'Session', plural: 'Sessions', icon: 'i-lucide-calendar-days' }
 ]
 
@@ -156,6 +159,25 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'status', label: 'Status', options: ['active', 'completed', 'failed', 'paused'] },
     { key: 'giver', label: 'Quest giver', placeholder: 'Who asked — [[link]] them in the body too' },
     { key: 'reward', label: 'Reward', placeholder: 'What is promised' }
+  ],
+  scene: [
+    { key: 'kind', label: 'Kind', options: ['roleplay', 'investigation', 'combat', 'travel', 'downtime'] },
+    { key: 'status', label: 'Status', options: ['planned', 'played', 'skipped'] },
+    { key: 'purpose', label: 'Purpose', placeholder: 'Why this scene exists — what it moves' },
+    { key: 'learn', label: 'Players learn', placeholder: 'The one thing they should leave knowing' }
+  ],
+  encounter: [
+    { key: 'kind', label: 'Kind', options: ['combat', 'social', 'puzzle', 'chase', 'skill challenge'] },
+    { key: 'difficulty', label: 'Difficulty', options: ['trivial', 'easy', 'medium', 'hard', 'deadly'] },
+    { key: 'objective', label: 'Objective', placeholder: 'Survive five rounds — better than "kill them all"' },
+    { key: 'trigger', label: 'Trigger', placeholder: 'What sets it off' },
+    { key: 'reward', label: 'Reward', placeholder: 'What it pays out' }
+  ],
+  clue: [
+    { key: 'points_to', label: 'Points toward', placeholder: 'The conclusion it supports — same wording across clues' },
+    { key: 'found_at', label: 'Found at', placeholder: 'Where, and how they get it' },
+    { key: 'weight', label: 'Weight', options: ['essential', 'supporting', 'flavour'] },
+    { key: 'difficulty', label: 'Difficulty', placeholder: 'DC 13 Investigation, or "ask anyone in the inn"' }
   ]
 }
 
@@ -199,6 +221,12 @@ export function useEntities() {
 
   const remove = (id: string) => api.del(`${base()}/entities/${id}`)
 
+  const link = (id: string, to_id: string, relation: LinkRelation) =>
+    api.post<EntityDetail>(`${base()}/entities/${id}/links`, { to_id, relation })
+
+  const unlink = (id: string, to_id: string) =>
+    api.del(`${base()}/entities/${id}/links/${to_id}`)
+
   const search = (q: string, limit = 20) =>
     api.get<SearchHit[]>(`${base()}/search`, { query: { q, limit } })
 
@@ -233,6 +261,8 @@ export function useEntities() {
     create,
     update,
     remove,
+    link,
+    unlink,
     search,
     campaignImages,
     images,

@@ -199,7 +199,30 @@ celini, a igrač nikad ne dobija DM-ov deo — pa bi mu sledeće čuvanje sheeta
 obrisalo tvoje beleške. Sad se izmena igrača uklapa ispod DM-ovih ključeva
 (`merge_dm_data`), a `dm_` ključ koji igrač pokuša da upiše se odbacuje.
 
-Sledeće po dogovoru: scene/encounter/clue, pa run mode.
+## Korak 4: scene, encounter i clue ✓
+
+Tri nova tipa, svaki košta jedan enum — to je i bila poenta jedne tabele.
+
+- **Scene**: kind (roleplay / investigation / combat / travel / downtime), status,
+  purpose („zašto ova scena postoji") i „players learn". Izlazi iz scene su
+  **pravi `leads_to` linkovi**, ne lista imena u polju — pa odredište zna šta
+  vodi ka njemu, a preimenovanje nosi strelicu sa sobom. `sync_wiki_links` dira
+  isključivo `mentions`, pa izmena teksta ne briše flowchart (ima test baš za to).
+  Kartica „Where it goes" prikazuje oba pravca i kaže kad scena nema izlaz.
+- **Encounter**: kind (combat / social / puzzle / chase / skill challenge),
+  difficulty, **objective** („preživeti tri runde" umesto „pobij sve"), trigger,
+  reward. Puzzle je encounter tipa puzzle, ne četvrti tip — hintovi idu u
+  `dm_notes`.
+- **Clue**: points_to (zaključak), found_at, weight (essential / supporting /
+  flavour), difficulty. Na listi tragova stoji kartica **„Ways in"** koja grupiše
+  po zaključku i pokazuje tri tačkice po redu — **rule of three koji softver
+  proverava umesto tebe**, sa upozorenjem kad nešto esencijalno visi o manje od
+  tri traga.
+
+Usput: vrednosti strukturiranih polja se više ne kapitalizuju po reči osim kod
+polja sa fiksnim opcijama — rečenice su izgledale Kao Naslov Knjige.
+
+Sledeće po dogovoru: run mode.
 
 ### Namerno van plana (za sada)
 

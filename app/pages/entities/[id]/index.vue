@@ -180,7 +180,8 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
   member_of: 'Member of',
   located_in: 'Located in',
   owns: 'Owns',
-  related_to: 'Related to'
+  related_to: 'Related to',
+  leads_to: 'Leads to'
 }
 </script>
 
@@ -339,7 +340,12 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
                   <dt class="shrink-0 text-muted">
                     {{ field.label }}
                   </dt>
-                  <dd class="min-w-0 truncate font-medium capitalize text-highlighted">
+                  <!-- Capitalise the fixed vocabularies ("alive", "rare"),
+                       never the free text — it mangles a sentence -->
+                  <dd
+                    class="min-w-0 truncate font-medium text-highlighted"
+                    :class="field.options && 'capitalize'"
+                  >
                     {{ field.value }}
                   </dd>
                 </div>
@@ -399,6 +405,13 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
             />
           </div>
         </ContentCard>
+
+        <SceneFlow
+          v-if="entity.type === 'scene'"
+          :entity="entity"
+          :can-edit="canWrite"
+          @changed="load"
+        />
 
         <EntityGallery
           v-if="canWrite"

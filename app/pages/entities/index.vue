@@ -104,6 +104,42 @@ async function applyVisibility(visibility: Visibility) {
   }
 }
 
+/* --- Rule of three -----------------------------------------------------------
+ * Players miss one clue, misread the second, and connect the third. So a
+ * conclusion the adventure depends on wants three ways in. The DM shouldn't
+ * have to count them by hand — this does, using the wording they typed into
+ * "Points toward".
+ */
+const clueCoverage = computed(() => {
+  if (type.value !== 'clue' || !pageData.value) {
+    return []
+  }
+
+  const byConclusion = new Map<string, { conclusion: string, total: number, essential: number }>()
+
+  for (const clue of pageData.value.items) {
+    const conclusion = String(clue.data.points_to ?? '').trim()
+    if (!conclusion) {
+      continue
+    }
+
+    const key = conclusion.toLowerCase()
+    const row = byConclusion.get(key) ?? { conclusion, total: 0, essential: 0 }
+    row.total += 1
+    if (clue.data.weight === 'essential') {
+      row.essential += 1
+    }
+    byConclusion.set(key, row)
+  }
+
+  return [...byConclusion.values()].sort((a, b) => a.total - b.total)
+})
+
+/** Only the ones that carry weight and don't have three ways in yet */
+const thinConclusions = computed(() =>
+  clueCoverage.value.filter(row => row.essential > 0 && row.total < 3)
+)
+
 // Leaving the page or switching type shouldn't strand a half-made selection
 watch([type, () => current.value?.id], () => {
   selecting.value = false
@@ -181,6 +217,36 @@ watch([type, () => current.value?.id], () => {
       </EmptyState>
 
       <template v-else>
+        <ContentCard
+          v-if="type === 'clue' && clueCoverage.length"
+          title="Ways in"
+          icon="i-lucide-shapes"
+          :description="thinConclusions.length
+            ? 'Something essential rests on fewer than three clues.'
+            : 'Every essential conclusion has three ways in.'"
+        >
+          <ul class="space-y-1.5">
+            <li
+              v-for="row in clueCoverage"
+              :key="row.conclusion"
+              class="flex items-center gap-3"
+            >
+              <span class="min-w-0 flex-1 truncate text-sm text-toned">{{ row.conclusion }}</span>
+              <span class="flex shrink-0 gap-1">
+                <span
+                  v-for="index in 3"
+                  :key="index"
+                  class="size-2 rounded-full"
+                  :class="index <= row.total ? 'bg-primary' : 'bg-elevated'"
+                />
+              </span>
+              <span class="w-24 shrink-0 text-right text-xs tabular-nums text-dimmed">
+                {{ row.total }} {{ row.total === 1 ? 'clue' : 'clues' }}
+              </span>
+            </li>
+          </ul>
+        </ContentCard>
+
         <div class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           <EntityCard
             v-for="entity in pageData.items"

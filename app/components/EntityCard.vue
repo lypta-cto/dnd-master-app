@@ -56,6 +56,22 @@ const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'erro
       if (!status || status === 'alive') return null
       return { label: status, color: status === 'dead' ? 'error' : 'warning' }
     }
+    case 'scene': {
+      const status = String(d.status ?? 'planned')
+      const bits = [d.kind, status].filter(Boolean).join(' · ')
+      return { label: bits, color: status === 'played' ? 'success' : status === 'skipped' ? 'neutral' : 'warning' }
+    }
+    case 'encounter': {
+      const difficulty = String(d.difficulty ?? '')
+      const bits = [d.kind, difficulty].filter(Boolean).join(' · ')
+      return bits
+        ? { label: bits, color: difficulty === 'deadly' || difficulty === 'hard' ? 'error' : 'neutral' }
+        : null
+    }
+    case 'clue': {
+      const weight = String(d.weight ?? '')
+      return weight ? { label: weight, color: weight === 'essential' ? 'primary' : 'neutral' } : null
+    }
     case 'character': {
       const bits = [d.level ? `Lv ${d.level}` : null, d.class].filter(Boolean)
       return bits.length ? { label: bits.join(' · '), color: 'neutral' } : null
