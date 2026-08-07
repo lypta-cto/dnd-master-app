@@ -21,6 +21,14 @@ interface SlotRow {
   used: number
 }
 
+/** Ki, rages, bardic inspiration, pact slots — anything with checkboxes on paper */
+interface ResourceRow {
+  name: string
+  total: number
+  used: number
+  reset: 'short' | 'long'
+}
+
 interface SheetData {
   level: number
   ac: number
@@ -28,6 +36,7 @@ interface SheetData {
   current_hp: number
   temp_hp: number
   slots: Record<string, SlotRow>
+  resources: ResourceRow[]
   conditions: string[]
   inspiration: boolean
   death_saves: { s: number, f: number }
@@ -48,6 +57,7 @@ function fromData(data: Record<string, unknown>): SheetData {
     current_hp: d.current_hp === undefined ? Number(d.max_hp) || 10 : Number(d.current_hp),
     temp_hp: Number(d.temp_hp) || 0,
     slots: { ...(d.slots ?? {}) },
+    resources: Array.isArray(d.resources) ? d.resources.map(r => ({ ...r })) : [],
     conditions: [...(d.conditions ?? [])],
     inspiration: !!d.inspiration,
     death_saves: { s: d.death_saves?.s ?? 0, f: d.death_saves?.f ?? 0 }
@@ -129,7 +139,7 @@ function applyCustom(sign: 1 | -1) {
 async function longRest() {
   const ok = await confirm({
     title: 'Long rest?',
-    description: 'HP back to max, temp HP gone, all spell slots restored, death saves cleared.',
+    description: 'HP back to max, temp HP gone, spell slots and resources restored, death saves cleared.',
     confirmLabel: 'Rest'
   })
   if (!ok) {
@@ -141,7 +151,57 @@ async function longRest() {
   for (const row of Object.values(sheet.slots)) {
     row.used = 0
   }
+  for (const resource of sheet.resources) {
+    resource.used = 0
+  }
   toast.add({ title: 'Long rest taken', icon: 'i-lucide-moon', color: 'success' })
+}
+
+async function shortRest() {
+  const restored = sheet.resources.filter(r => r.reset === 'short')
+  const ok = await confirm({
+    title: 'Short rest?',
+    description: restored.length
+      ? `Restores: ${restored.map(r => r.name).join(', ')}. Hit dice stay on paper.`
+      : 'Nothing on this sheet resets on a short rest. Mark a resource as SR below.',
+    confirmLabel: 'Rest'
+  })
+  if (!ok) {
+    return
+  }
+  for (const resource of restored) {
+    resource.used = 0
+  }
+  if (restored.length) {
+    toast.add({ title: 'Short rest taken', icon: 'i-lucide-coffee', color: 'success' })
+  }
+}
+
+const newResourceName = ref('')
+
+function addResource() {
+  const name = newResourceName.value.trim()
+  if (!name) {
+    return
+  }
+  sheet.resources = [...sheet.resources, { name, total: 3, used: 0, reset: 'long' }]
+  newResourceName.value = ''
+}
+
+function toggleResource(resource: ResourceRow, index: number) {
+  if (!props.canEdit) {
+    return
+  }
+  resource.used = index < resource.used ? index : index + 1
+}
+
+function setResourceTotal(resource: ResourceRow, total: number) {
+  resource.total = Math.max(1, total)
+  resource.used = Math.min(resource.used, resource.total)
+}
+
+function removeResource(resource: ResourceRow) {
+  sheet.resources = sheet.resources.filter(r => r !== resource)
 }
 
 /** Slot levels that exist, plus one empty level the owner can start using */
@@ -196,6 +256,15 @@ function setDeathSave(kind: 's' | 'f', index: number) {
         color="neutral"
         variant="subtle"
         size="sm"
+      />
+      <UButton
+        v-if="canEdit"
+        label="Short rest"
+        icon="i-lucide-coffee"
+        color="neutral"
+        variant="outline"
+        size="sm"
+        @click="shortRest"
       />
       <UButton
         v-if="canEdit"
@@ -389,6 +458,92 @@ function setDeathSave(kind: 's' | 'f', index: number) {
         >
           Filled squares are used. Set a level's total to 0 to remove it.
         </p>
+      </div>
+
+      <!-- Custom resources: ki, rage, pact slots… -->
+      <div v-if="sheet.resources.length || canEdit">
+        <p class="mb-1.5 text-sm font-medium text-highlighted">
+          Resources
+        </p>
+        <div
+          v-if="sheet.resources.length"
+          class="space-y-1.5"
+        >
+          <div
+            v-for="(resource, rIndex) in sheet.resources"
+            :key="rIndex"
+            class="flex items-center gap-2"
+          >
+            <span class="w-28 shrink-0 truncate text-xs text-muted">{{ resource.name }}</span>
+
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="index in resource.total"
+                :key="index"
+                type="button"
+                class="size-5 rounded-md border transition-colors"
+                :class="index <= resource.used
+                  ? 'border-primary bg-primary'
+                  : 'border-accented bg-transparent hover:border-primary'"
+                :disabled="!canEdit"
+                :aria-label="`${resource.name} ${index}`"
+                @click="toggleResource(resource, index - 1)"
+              />
+            </div>
+
+            <template v-if="canEdit">
+              <UInputNumber
+                :model-value="resource.total"
+                :min="1"
+                :max="20"
+                size="xs"
+                class="ml-auto w-20"
+                :aria-label="`Total ${resource.name}`"
+                @update:model-value="value => setResourceTotal(resource, value ?? 1)"
+              />
+              <UTooltip :text="resource.reset === 'short' ? 'Back on a short rest' : 'Back on a long rest'">
+                <UButton
+                  :label="resource.reset === 'short' ? 'SR' : 'LR'"
+                  size="xs"
+                  color="neutral"
+                  variant="outline"
+                  :aria-label="`${resource.name} resets on a ${resource.reset} rest`"
+                  @click="resource.reset = resource.reset === 'short' ? 'long' : 'short'"
+                />
+              </UTooltip>
+              <UButton
+                icon="i-lucide-x"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                :aria-label="`Remove ${resource.name}`"
+                @click="removeResource(resource)"
+              />
+            </template>
+          </div>
+        </div>
+
+        <div
+          v-if="canEdit"
+          class="mt-2 flex items-center gap-2"
+        >
+          <UInput
+            v-model="newResourceName"
+            placeholder="Ki, Rage, Bardic inspiration…"
+            size="xs"
+            class="w-56"
+            @keydown.enter="addResource"
+          />
+          <UButton
+            label="Add"
+            icon="i-lucide-plus"
+            size="xs"
+            color="neutral"
+            variant="outline"
+            :disabled="!newResourceName.trim()"
+            @click="addResource"
+          />
+        </div>
       </div>
 
       <!-- Conditions -->

@@ -66,6 +66,32 @@ const QUEST_STATUS_COLORS = {
   paused: 'neutral'
 } as const
 
+const QUEST_STATUSES = ['active', 'completed', 'failed', 'paused'] as const
+
+/** Close a thread without leaving the dashboard */
+async function setQuestStatus(quest: EntitySummary, status: string) {
+  await entities.update(quest.id, { data: { ...quest.data, status } })
+  quest.data = { ...quest.data, status }
+  quests.value = [...quests.value]
+}
+
+function questStatusItems(quest: EntitySummary) {
+  return QUEST_STATUSES.map(status => ({
+    label: status,
+    type: 'checkbox' as const,
+    checked: (quest.data.status ?? 'active') === status,
+    onSelect: () => setQuestStatus(quest, status)
+  }))
+}
+
+/** The session happened — flip it and the recap card follows */
+async function markPlayed(session: EntitySummary) {
+  await entities.update(session.id, { data: { ...session.data, status: 'played' } })
+  session.data = { ...session.data, status: 'played' }
+  sessions.value = [...sessions.value]
+  latestRecap.value = await entities.read(session.id)
+}
+
 function sessionLabel(session: EntitySummary) {
   const number = session.data.number ? `Session ${session.data.number}` : session.name
   const date = session.data.date ? ` · ${session.data.date}` : ''
@@ -185,18 +211,29 @@ function sessionLabel(session: EntitySummary) {
               title="Next session"
               icon="i-lucide-calendar-clock"
             >
-              <NuxtLink
-                v-if="nextPlanned"
-                :to="`/entities/${nextPlanned.id}`"
-                class="group block"
-              >
-                <p class="font-medium text-highlighted group-hover:text-primary">
-                  {{ sessionLabel(nextPlanned) }}
-                </p>
-                <p class="mt-1 line-clamp-3 text-sm text-muted">
-                  {{ nextPlanned.summary || 'Prep lives inside — open it.' }}
-                </p>
-              </NuxtLink>
+              <div v-if="nextPlanned">
+                <NuxtLink
+                  :to="`/entities/${nextPlanned.id}`"
+                  class="group block"
+                >
+                  <p class="font-medium text-highlighted group-hover:text-primary">
+                    {{ sessionLabel(nextPlanned) }}
+                  </p>
+                  <p class="mt-1 line-clamp-3 text-sm text-muted">
+                    {{ nextPlanned.summary || 'Prep lives inside — open it.' }}
+                  </p>
+                </NuxtLink>
+                <UButton
+                  v-if="isDm"
+                  label="Mark played"
+                  icon="i-lucide-check"
+                  color="neutral"
+                  variant="outline"
+                  size="xs"
+                  class="mt-2"
+                  @click="markPlayed(nextPlanned)"
+                />
+              </div>
               <p
                 v-else
                 class="text-sm text-muted"
@@ -296,7 +333,22 @@ function sessionLabel(session: EntitySummary) {
                   {{ quest.summary || String(quest.data.giver ?? '') || 'No summary.' }}
                 </span>
               </span>
+              <UDropdownMenu
+                v-if="isDm"
+                :items="questStatusItems(quest)"
+                :content="{ align: 'end' }"
+              >
+                <UBadge
+                  :label="String(quest.data.status ?? 'active')"
+                  :color="QUEST_STATUS_COLORS[quest.data.status as keyof typeof QUEST_STATUS_COLORS] ?? 'primary'"
+                  variant="subtle"
+                  size="sm"
+                  class="ml-auto shrink-0 cursor-pointer capitalize"
+                  @click.prevent.stop
+                />
+              </UDropdownMenu>
               <UBadge
+                v-else
                 :label="String(quest.data.status ?? 'active')"
                 :color="QUEST_STATUS_COLORS[quest.data.status as keyof typeof QUEST_STATUS_COLORS] ?? 'primary'"
                 variant="subtle"

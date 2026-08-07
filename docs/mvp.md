@@ -94,6 +94,16 @@ Ono što kampanju čini stvarnom, ne demo-om.
 - Combat: direktan unos HP-a na svakom redu pored ± dugmića.
 - Slideshow: Select all / Clear.
 
+**Prolaz 2** ✓ — redosled, resursi, brzi statusi:
+
+- Galerija: prevuci thumbnail na drugo mesto → redosled se čuva (`position` PATCH).
+- Sheet: **Resources** — proizvoljni brojači (Ki, Rage, Bardic…) sa kvadratićima kao
+  slotovi, totalom i SR/LR prekidačem; **Short rest** dugme obnavlja SR resurse
+  (dijalog kaže šta tačno vraća), Long rest obnavlja sve.
+- Dashboard: status questa menjaš iz badge-a na Open threads (dropdown, bez
+  napuštanja stranice — completed odmah nestaje iz liste); planirana sesija ima
+  **Mark played** koji je odmah pretvara u recap karticu.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,

@@ -77,6 +77,37 @@ function onDrop(event: DragEvent) {
   uploadFiles(files)
 }
 
+/* Reordering: thumbnails are draggable; drop one onto another to swap places.
+   Distinct from file-drop — while a thumb is in flight the upload zone stays quiet. */
+const reorderingId = ref<string | null>(null)
+
+function onThumbDragStart(image: EntityImage) {
+  reorderingId.value = image.id
+}
+
+async function onThumbDrop(target: EntityImage) {
+  const fromId = reorderingId.value
+  reorderingId.value = null
+  dragging.value = false
+  if (!fromId || fromId === target.id) {
+    return
+  }
+
+  const items = [...gallery.value]
+  const from = items.findIndex(i => i.id === fromId)
+  const to = items.findIndex(i => i.id === target.id)
+  items.splice(to, 0, ...items.splice(from, 1))
+  gallery.value = items.map((img, index) => ({ ...img, position: index }))
+
+  await Promise.all(
+    items.map((img, index) =>
+      img.position === index
+        ? null
+        : entities.updateImage(props.entity.id, img.id, { position: index })
+    ).filter(Boolean)
+  )
+}
+
 // ⌘V an image copied from anywhere — maps, art, screenshots
 function onPaste(event: ClipboardEvent) {
   const files = [...(event.clipboardData?.files ?? [])].filter(f => f.type.startsWith('image/'))
@@ -178,9 +209,9 @@ async function removeOne(image: EntityImage) {
   <ContentCard
     title="Gallery"
     icon="i-lucide-images"
-    :description="dragging ? 'Drop to upload' : 'Portraits, battle art, floor plans. Drop files or ⌘V a copied image.'"
+    :description="dragging ? 'Drop to upload' : 'Portraits, battle art, floor plans. Drop files or ⌘V to add; drag thumbnails to reorder.'"
     :class="dragging && 'ring-2 ring-primary'"
-    @dragover.prevent="dragging = true"
+    @dragover.prevent="dragging = !reorderingId"
     @dragleave.prevent="dragging = false"
     @drop.prevent="onDrop"
   >
@@ -230,7 +261,13 @@ async function removeOne(image: EntityImage) {
       <figure
         v-for="image in gallery"
         :key="image.id"
-        class="group relative overflow-hidden rounded-xl border border-default"
+        class="group relative overflow-hidden rounded-xl border border-default transition-opacity"
+        :class="reorderingId === image.id && 'opacity-40'"
+        draggable="true"
+        @dragstart="onThumbDragStart(image)"
+        @dragend="reorderingId = null"
+        @dragover.prevent
+        @drop.prevent.stop="onThumbDrop(image)"
       >
         <button
           type="button"
