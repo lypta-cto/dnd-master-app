@@ -200,6 +200,45 @@ async function submit() {
       </UFormField>
     </div>
 
+    <!-- Behind the curtain: what the party wrongly believes, and what's true -->
+    <div
+      v-if="isDm"
+      class="space-y-4 rounded-xl border border-default p-4"
+    >
+      <p class="flex items-center gap-2 text-sm font-medium text-highlighted">
+        <UIcon
+          name="i-lucide-eye-off"
+          class="size-4 text-dimmed"
+        />
+        Yours only — the API never sends this to a player
+      </p>
+
+      <UFormField
+        label="What the party believes"
+        help="The version they've been told. Handy to have next to the truth."
+      >
+        <UInput
+          :model-value="(form.data.dm_players_think as string | undefined) ?? ''"
+          placeholder="He is protecting the village."
+          class="w-full"
+          @update:model-value="value => (form.data.dm_players_think = value)"
+        />
+      </UFormField>
+
+      <UFormField
+        label="Notes"
+        help="Markdown, and [[links]] work here too."
+      >
+        <UTextarea
+          :model-value="(form.data.dm_notes as string | undefined) ?? ''"
+          :rows="5"
+          placeholder="He leads the cult feeding the artefact. Panics if you mention [[the Old Mill]]."
+          class="w-full font-mono text-sm"
+          @update:model-value="value => (form.data.dm_notes = value)"
+        />
+      </UFormField>
+    </div>
+
     <UFormField label="Tags">
       <UInputTags
         v-model="form.tags"

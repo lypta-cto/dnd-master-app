@@ -181,8 +181,25 @@ svoj ref — pa je promena kampanje u sidebar-u ostavljala dashboard na staroj
 (družina i brojači prethodne kampanje). Sad je deljeni `useState`, a kolačić je
 samo trajnost.
 
-Sledeće po dogovoru: DM-only polja na entitetima („igrači misle X, istina je Y"),
-pa scene/encounter/clue, pa run mode.
+## Korak 3: DM-only polja na entitetima ✓
+
+Isto pravilo spušteno nivo niže: `dm_` ključevi u `data` entiteta nikad ne stižu
+igraču. Filtrira se u jednoj funkciji (`visible_data`) na svakom mestu gde
+entitet postaje odgovor — liste, pretraga, oba pravca linkova, detalj, promena
+covera i likovi ugrađeni u roster. U rutama se summary sad pravi isključivo kroz
+`_summary`, da se ne može zaboraviti.
+
+Dva polja u formi (vidi ih samo DM): **What the party believes** i **Notes**
+(markdown sa `[[linkovima]]`). Na stranici entiteta se prikazuju kao kartica
+„Behind the curtain", a **Player view** sad izlistava i šta se zadržava
+(„Kept back: your notes, what the party believes").
+
+Usput rešena oštra ivica koju sam ranije prijavio: `data` se pri upisu menja u
+celini, a igrač nikad ne dobija DM-ov deo — pa bi mu sledeće čuvanje sheeta
+obrisalo tvoje beleške. Sad se izmena igrača uklapa ispod DM-ovih ključeva
+(`merge_dm_data`), a `dm_` ključ koji igrač pokuša da upiše se odbacuje.
+
+Sledeće po dogovoru: scene/encounter/clue, pa run mode.
 
 ### Namerno van plana (za sada)
 

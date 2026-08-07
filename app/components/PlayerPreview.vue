@@ -28,6 +28,21 @@ const visibleBacklinks = computed(() =>
   props.entity.backlinks.filter(link => link.visibility !== 'dm_only')
 )
 
+/**
+ * The DM's own request carries `dm_` fields; a player's never would. Listing
+ * them here — by name, not by content — is the point of the preview: you see
+ * what you're holding back, not just what you're giving away.
+ */
+const withheld = computed(() =>
+  Object.keys(props.entity.data)
+    .filter(key => key.startsWith('dm_'))
+    .map(key => (key === 'dm_notes'
+      ? 'your notes'
+      : key === 'dm_players_think'
+        ? 'what the party believes'
+        : key.replace(/^dm_/, '').replace(/_/g, ' ')))
+)
+
 const focusStyle = computed(() => {
   const f = props.entity.data.cover_focus as { x: number, y: number } | undefined
   return f && typeof f.x === 'number' ? { objectPosition: `${f.x}% ${f.y}%` } : undefined
@@ -104,6 +119,20 @@ const focusStyle = computed(() => {
         >
           Mentioned in
           <span class="text-toned">{{ visibleBacklinks.map(b => b.name).join(', ') }}</span>
+        </div>
+
+        <div
+          v-if="withheld.length"
+          class="flex items-start gap-2 rounded-xl bg-elevated p-3 text-sm"
+        >
+          <UIcon
+            name="i-lucide-eye-off"
+            class="mt-0.5 size-4 shrink-0 text-dimmed"
+          />
+          <p class="text-muted">
+            Kept back:
+            <span class="text-toned">{{ withheld.join(', ') }}</span>.
+          </p>
         </div>
 
         <div

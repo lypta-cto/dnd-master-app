@@ -41,6 +41,9 @@ const coverFocusStyle = computed(() => {
 })
 
 const headerLightbox = ref(false)
+
+const dmNotes = computed(() => (entity.value?.data.dm_notes as string | undefined) ?? '')
+const playersThink = computed(() => (entity.value?.data.dm_players_think as string | undefined) ?? '')
 const playerPreview = ref(false)
 
 /** Backlinks grouped by type — a wall of names hides who is talking about whom */
@@ -366,6 +369,35 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
             :editable="canWrite"
             @toggle-task="toggleTask"
           />
+        </ContentCard>
+
+        <!-- The DM's half. It arrives only on a DM's request, but the guard
+             keeps the intent obvious to whoever reads this next. -->
+        <ContentCard
+          v-if="isDm && (dmNotes || playersThink)"
+          title="Behind the curtain"
+          icon="i-lucide-eye-off"
+          description="Players never see this."
+        >
+          <div class="space-y-4">
+            <div
+              v-if="playersThink"
+              class="rounded-xl border border-default p-3"
+            >
+              <p class="text-xs font-medium uppercase tracking-wide text-dimmed">
+                The party believes
+              </p>
+              <p class="mt-1 text-sm text-toned">
+                {{ playersThink }}
+              </p>
+            </div>
+
+            <MarkdownBody
+              v-if="dmNotes"
+              :body="dmNotes"
+              :linked="entity.links"
+            />
+          </div>
         </ContentCard>
 
         <EntityGallery
