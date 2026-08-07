@@ -25,10 +25,25 @@ export default defineNuxtConfig({
     fallback: 'light'
   },
 
-  // Override at runtime with NUXT_PUBLIC_API_BASE
+  // Set at build time with NUXT_PUBLIC_API_BASE / NUXT_PUBLIC_API_ORIGIN — this
+  // is a static build, so there is no server left to read them at runtime.
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:8001/api/v1'
+      /**
+       * Where ordinary requests go. In production this is the relative
+       * `/api/v1`: the host rewrites it to the API service, which makes the
+       * whole app one origin and the refresh cookie first-party. Two real
+       * origins would need SameSite=None, which Safari discards by default —
+       * an iPhone at the table would drop its session every quarter hour.
+       */
+      apiBase: 'http://localhost:8001/api/v1',
+      /**
+       * The API's own origin, for the two things that must not go through the
+       * rewrite: uploaded images, and the cast stream — a proxy is free to
+       * buffer a response, and a buffered event stream is a display that never
+       * updates. Empty means "same origin as this page".
+       */
+      apiOrigin: 'http://localhost:8001'
     }
   },
 

@@ -36,7 +36,17 @@ export function useCast() {
  * rather than trusting the event body, so the display can never drift.
  */
 export function useCastDisplay(campaignId: string, token: string) {
-  const { apiBase } = useRuntimeConfig().public
+  const { apiBase, apiOrigin } = useRuntimeConfig().public
+
+  /**
+   * The stream goes straight to the API, never through the frontend's rewrite.
+   * A proxy may buffer a response, and a buffered event stream is a display
+   * that connects, says nothing, and never updates. It can afford to: the
+   * token travels in the query string, so this connection needs no cookie.
+   */
+  const streamBase = apiBase.startsWith('http')
+    ? apiBase
+    : `${apiOrigin.replace(/\/$/, '')}${apiBase}`
 
   const state = ref<CastState>({ mode: 'idle', payload: {} })
   const connected = ref(false)
@@ -64,7 +74,7 @@ export function useCastDisplay(campaignId: string, token: string) {
   onMounted(() => {
     refresh()
 
-    source = new EventSource(`${apiBase}/cast/${campaignId}/stream?t=${encodeURIComponent(token)}`)
+    source = new EventSource(`${streamBase}/cast/${campaignId}/stream?t=${encodeURIComponent(token)}`)
     source.addEventListener('open', () => (connected.value = true))
     source.addEventListener('error', () => (connected.value = false))
     source.addEventListener('cast', () => refresh())

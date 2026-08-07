@@ -7,11 +7,16 @@
  * Absolute URLs — an OAuth provider's avatar, a CDN — are passed through.
  */
 export function useMediaUrl() {
-  const { apiBase } = useRuntimeConfig().public
+  const config = useRuntimeConfig().public
 
   const apiOrigin = computed(() => {
+    if (config.apiOrigin) {
+      return config.apiOrigin.replace(/\/$/, '')
+    }
+    // `apiBase` is relative in a proxied deployment, so there's no origin to
+    // take from it — and none is needed: same origin resolves on its own.
     try {
-      return new URL(apiBase).origin
+      return new URL(config.apiBase).origin
     } catch {
       return ''
     }
