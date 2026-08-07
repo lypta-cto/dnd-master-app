@@ -79,6 +79,21 @@ Ono što kampanju čini stvarnom, ne demo-om.
   stranici; Roll u tajnosti ili Roll & cast — displej mesa brojeve pa se skrasi na
   užarenom totalu sa raspisom. Combat uz to ima "Roll the rest" za praznu inicijativu.
 
+## Doterivanje pre Neon deploy-a
+
+**Prolaz 1** ✓ — intuitivnost oko slika i brojeva:
+
+- Lightbox: klik na sliku u galeriji ili na cover u headeru → pun prikaz preko
+  celog ekrana, sa natpisom.
+- Crop focus: dugme u galeriji otvara birač — klikneš gde je "bitno" na coveru i
+  kartice/header seku sliku oko te tačke (`data.cover_focus` → `object-position`).
+- Upload: drag & drop preko cele Gallery kartice + ⌘V nalepljene slike.
+- Sheet: direktan unos trenutnog HP-a, polje za proizvoljan iznos (Dmg/Heal,
+  temp prvo), **Long rest** dugme (HP na max, temp 0, slotovi resetovani, death
+  saves obrisani — uz potvrdu), lečenje sa 0 HP briše death saves.
+- Combat: direktan unos HP-a na svakom redu pored ± dugmića.
+- Slideshow: Select all / Clear.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,

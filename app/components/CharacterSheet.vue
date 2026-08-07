@@ -14,6 +14,7 @@ const props = defineProps<{
 
 const toast = useToast()
 const entities = useEntities()
+const { confirm } = useConfirm()
 
 interface SlotRow {
   total: number
@@ -98,7 +99,49 @@ function bumpHp(delta: number) {
     sheet.temp_hp -= absorbed
     delta += absorbed
   }
+  const wasDown = sheet.current_hp === 0
   sheet.current_hp = Math.max(0, Math.min(sheet.max_hp, sheet.current_hp + delta))
+  // Any healing from 0 ends the dying state
+  if (wasDown && sheet.current_hp > 0) {
+    sheet.death_saves = { s: 0, f: 0 }
+  }
+}
+
+function setHp(value: number | null) {
+  const wasDown = sheet.current_hp === 0
+  sheet.current_hp = Math.max(0, Math.min(sheet.max_hp, Math.round(value ?? 0)))
+  if (wasDown && sheet.current_hp > 0) {
+    sheet.death_saves = { s: 0, f: 0 }
+  }
+}
+
+/* Odd amounts — "takes 13 damage" — without clicking ± repeatedly */
+const customAmount = ref<number | null>(null)
+
+function applyCustom(sign: 1 | -1) {
+  if (!customAmount.value || customAmount.value < 1) {
+    return
+  }
+  bumpHp(sign * Math.round(customAmount.value))
+  customAmount.value = null
+}
+
+async function longRest() {
+  const ok = await confirm({
+    title: 'Long rest?',
+    description: 'HP back to max, temp HP gone, all spell slots restored, death saves cleared.',
+    confirmLabel: 'Rest'
+  })
+  if (!ok) {
+    return
+  }
+  sheet.current_hp = sheet.max_hp
+  sheet.temp_hp = 0
+  sheet.death_saves = { s: 0, f: 0 }
+  for (const row of Object.values(sheet.slots)) {
+    row.used = 0
+  }
+  toast.add({ title: 'Long rest taken', icon: 'i-lucide-moon', color: 'success' })
 }
 
 /** Slot levels that exist, plus one empty level the owner can start using */
@@ -154,6 +197,15 @@ function setDeathSave(kind: 's' | 'f', index: number) {
         variant="subtle"
         size="sm"
       />
+      <UButton
+        v-if="canEdit"
+        label="Long rest"
+        icon="i-lucide-moon"
+        color="neutral"
+        variant="outline"
+        size="sm"
+        @click="longRest"
+      />
     </template>
 
     <div class="space-y-5">
@@ -190,10 +242,23 @@ function setDeathSave(kind: 's' | 'f', index: number) {
 
       <!-- HP bar with quick +/- -->
       <div>
-        <div class="mb-1.5 flex items-baseline justify-between">
+        <div class="mb-1.5 flex items-center justify-between gap-2">
           <span class="text-sm font-medium text-highlighted">Hit points</span>
-          <span class="text-sm tabular-nums text-toned">
-            {{ sheet.current_hp }} / {{ sheet.max_hp }}
+          <span class="flex items-center gap-1.5 text-sm tabular-nums text-toned">
+            <UInputNumber
+              v-if="canEdit"
+              :model-value="sheet.current_hp"
+              :min="0"
+              :max="sheet.max_hp"
+              size="xs"
+              class="w-20"
+              aria-label="Current HP"
+              @update:model-value="setHp"
+            />
+            <template v-else>
+              {{ sheet.current_hp }}
+            </template>
+            / {{ sheet.max_hp }}
             <span
               v-if="sheet.temp_hp"
               class="text-info"
@@ -231,6 +296,38 @@ function setDeathSave(kind: 's' | 'f', index: number) {
             variant="soft"
             @click="bumpHp(delta)"
           />
+
+          <!-- Arbitrary amount: type 13, hit Dmg or Heal -->
+          <span class="mx-1 flex items-center gap-1">
+            <UInput
+              v-model.number="customAmount"
+              type="number"
+              min="1"
+              max="999"
+              placeholder="13"
+              size="xs"
+              class="w-14"
+              aria-label="Custom amount"
+              @keydown.enter="applyCustom(-1)"
+            />
+            <UButton
+              label="Dmg"
+              size="xs"
+              color="error"
+              variant="outline"
+              :disabled="!customAmount"
+              @click="applyCustom(-1)"
+            />
+            <UButton
+              label="Heal"
+              size="xs"
+              color="success"
+              variant="outline"
+              :disabled="!customAmount"
+              @click="applyCustom(1)"
+            />
+          </span>
+
           <UFormField class="ml-auto">
             <UInputNumber
               v-model="sheet.temp_hp"

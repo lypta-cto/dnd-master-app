@@ -224,7 +224,19 @@ async function bumpHp(combatant: Combatant, delta: number) {
     return
   }
   const current = combatant.current_hp ?? combatant.max_hp
-  combatant.current_hp = Math.max(0, Math.min(combatant.max_hp, current + delta))
+  await writeHp(combatant, current + delta)
+}
+
+/** Direct entry — a fireball hits for 28, you type 28's aftermath once. */
+async function setHp(combatant: Combatant, value: number | null) {
+  if (combatant.max_hp == null || value == null) {
+    return
+  }
+  await writeHp(combatant, Math.round(value))
+}
+
+async function writeHp(combatant: Combatant, next: number) {
+  combatant.current_hp = Math.max(0, Math.min(combatant.max_hp!, next))
   queueSave()
 
   // Character damage flows back to the sheet, so the party view agrees
@@ -416,8 +428,17 @@ function hpPercent(combatant: Combatant) {
                     variant="soft"
                     @click="bumpHp(combatant, delta)"
                   />
-                  <span class="w-16 text-center text-sm tabular-nums text-toned">
-                    {{ combatant.current_hp ?? combatant.max_hp }}/{{ combatant.max_hp }}
+                  <span class="flex items-center gap-1 text-sm tabular-nums text-toned">
+                    <UInputNumber
+                      :model-value="combatant.current_hp ?? combatant.max_hp"
+                      :min="0"
+                      :max="combatant.max_hp"
+                      size="xs"
+                      class="w-18"
+                      :aria-label="`${combatant.name} current HP`"
+                      @update:model-value="value => setHp(combatant, value)"
+                    />
+                    <span class="text-muted">/{{ combatant.max_hp }}</span>
                   </span>
                   <UButton
                     v-for="delta in [1, 5]"

@@ -33,6 +33,12 @@ async function loadPool() {
 
 watch(() => currentId.value, loadPool, { immediate: true })
 
+function selectAll() {
+  // Keep already-picked order, append the rest in pool order
+  const picked = new Set(selected.value)
+  selected.value = [...selected.value, ...pool.value.filter(i => !picked.has(i.id)).map(i => i.id)]
+}
+
 function toggle(id: string) {
   selected.value = selected.value.includes(id)
     ? selected.value.filter(s => s !== id)
@@ -96,6 +102,24 @@ async function castSlideshow() {
     </p>
 
     <template v-else>
+      <div class="mb-2 flex justify-end gap-1.5">
+        <UButton
+          label="Select all"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :disabled="selected.length === pool.length"
+          @click="selectAll"
+        />
+        <UButton
+          label="Clear"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :disabled="!selected.length"
+          @click="selected = []"
+        />
+      </div>
       <div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
         <button
           v-for="item in pool"

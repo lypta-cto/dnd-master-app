@@ -35,6 +35,13 @@ const canWrite = computed(
     || (entity.value?.type === 'character' && entity.value.owner_id === user.value?.id)
 )
 
+const coverFocusStyle = computed(() => {
+  const f = entity.value?.data.cover_focus as { x: number, y: number } | undefined
+  return f && typeof f.x === 'number' ? { objectPosition: `${f.x}% ${f.y}%` } : undefined
+})
+
+const headerLightbox = ref(false)
+
 /** Structured `data` fields for this type that actually hold a value */
 const filledFields = computed(() => {
   if (!entity.value) {
@@ -231,12 +238,20 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
       <div class="space-y-4 lg:col-span-2">
         <ContentCard>
           <div class="flex flex-wrap items-start gap-4">
-            <img
+            <button
               v-if="entity.image_url"
-              :src="mediaUrl(entity.image_url)"
-              :alt="entity.name"
-              class="size-24 rounded-2xl object-cover"
+              type="button"
+              class="shrink-0 cursor-zoom-in"
+              aria-label="View cover full size"
+              @click="headerLightbox = true"
             >
+              <img
+                :src="mediaUrl(entity.image_url)"
+                :alt="entity.name"
+                class="size-24 rounded-2xl object-cover"
+                :style="coverFocusStyle"
+              >
+            </button>
             <span
               v-else
               class="flex size-24 items-center justify-center rounded-2xl bg-primary/10 text-primary"
@@ -334,6 +349,14 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           v-if="isDm"
           :entity="entity"
           @cover-changed="url => (entity!.image_url = url)"
+          @focus-changed="point => (entity!.data = { ...entity!.data, cover_focus: point })"
+        />
+
+        <ImageLightbox
+          v-if="entity.image_url"
+          v-model:open="headerLightbox"
+          :src="mediaUrl(entity.image_url)!"
+          :caption="entity.name"
         />
       </div>
 

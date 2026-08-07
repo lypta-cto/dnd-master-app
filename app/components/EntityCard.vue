@@ -8,6 +8,12 @@ const props = defineProps<{
 const mediaUrl = useMediaUrl()
 const meta = computed(() => entityTypeMeta(props.entity.type))
 
+/** Where the crop centres — set by the DM from the gallery's Crop focus */
+const focusStyle = computed(() => {
+  const f = props.entity.data.cover_focus as { x: number, y: number } | undefined
+  return f && typeof f.x === 'number' ? { objectPosition: `${f.x}% ${f.y}%` } : undefined
+})
+
 const QUEST_COLORS: Record<string, 'primary' | 'success' | 'error' | 'neutral'> = {
   active: 'primary', completed: 'success', failed: 'error', paused: 'neutral'
 }
@@ -53,6 +59,7 @@ const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'erro
       :src="mediaUrl(entity.image_url)"
       :alt="entity.name"
       class="size-14 shrink-0 rounded-xl object-cover"
+      :style="focusStyle"
     >
     <span
       v-else

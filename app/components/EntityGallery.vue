@@ -5,6 +5,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   coverChanged: [url: string | null]
+  focusChanged: [point: { x: number, y: number }]
 }>()
 
 const toast = useToast()
@@ -17,6 +18,40 @@ const input = useTemplateRef<HTMLInputElement>('input')
 const gallery = ref<EntityImage[]>([])
 const loading = ref(true)
 const busy = ref(false)
+const dragging = ref(false)
+
+/* Full-size view + focal point picking */
+const lightbox = reactive({ open: false, src: '', caption: '', pickFocus: false })
+
+const coverFocus = computed(() => {
+  const focus = props.entity.data.cover_focus as { x: number, y: number } | undefined
+  return focus && typeof focus.x === 'number' ? focus : null
+})
+
+function view(image: EntityImage) {
+  lightbox.src = mediaUrl(image.url)!
+  lightbox.caption = image.caption ?? props.entity.name
+  lightbox.pickFocus = false
+  lightbox.open = true
+}
+
+function pickFocus() {
+  if (!props.entity.image_url) {
+    return
+  }
+  lightbox.src = mediaUrl(props.entity.image_url)!
+  lightbox.caption = ''
+  lightbox.pickFocus = true
+  lightbox.open = true
+}
+
+async function onFocusPicked(point: { x: number, y: number }) {
+  await entities.update(props.entity.id, {
+    data: { ...props.entity.data, cover_focus: point }
+  })
+  emit('focusChanged', point)
+  toast.add({ title: 'Crop focus saved', icon: 'i-lucide-focus', color: 'success' })
+}
 
 async function load() {
   loading.value = true
@@ -30,8 +65,31 @@ async function load() {
 watch(() => props.entity.id, load, { immediate: true })
 
 async function onFileChange(event: Event) {
-  const files = [...((event.target as HTMLInputElement).files ?? [])]
-  if (!files.length) {
+  await uploadFiles([...((event.target as HTMLInputElement).files ?? [])])
+  if (input.value) {
+    input.value.value = ''
+  }
+}
+
+function onDrop(event: DragEvent) {
+  dragging.value = false
+  const files = [...(event.dataTransfer?.files ?? [])].filter(f => f.type.startsWith('image/'))
+  uploadFiles(files)
+}
+
+// ⌘V an image copied from anywhere — maps, art, screenshots
+function onPaste(event: ClipboardEvent) {
+  const files = [...(event.clipboardData?.files ?? [])].filter(f => f.type.startsWith('image/'))
+  if (files.length) {
+    uploadFiles(files)
+  }
+}
+
+onMounted(() => window.addEventListener('paste', onPaste))
+onUnmounted(() => window.removeEventListener('paste', onPaste))
+
+async function uploadFiles(files: File[]) {
+  if (!files.length || busy.value) {
     return
   }
 
@@ -58,9 +116,6 @@ async function onFileChange(event: Event) {
     toast.add({ title: apiErrorMessage(error, 'Upload failed'), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
     busy.value = false
-    if (input.value) {
-      input.value.value = ''
-    }
   }
 }
 
@@ -123,9 +178,22 @@ async function removeOne(image: EntityImage) {
   <ContentCard
     title="Gallery"
     icon="i-lucide-images"
-    description="Portraits, battle art, floor plans. Any of them can go to the table."
+    :description="dragging ? 'Drop to upload' : 'Portraits, battle art, floor plans. Drop files or ⌘V a copied image.'"
+    :class="dragging && 'ring-2 ring-primary'"
+    @dragover.prevent="dragging = true"
+    @dragleave.prevent="dragging = false"
+    @drop.prevent="onDrop"
   >
     <template #actions>
+      <UButton
+        v-if="entity.image_url"
+        label="Crop focus"
+        icon="i-lucide-focus"
+        color="neutral"
+        variant="outline"
+        size="sm"
+        @click="pickFocus"
+      />
       <UButton
         label="Add images"
         icon="i-lucide-image-plus"
@@ -164,11 +232,18 @@ async function removeOne(image: EntityImage) {
         :key="image.id"
         class="group relative overflow-hidden rounded-xl border border-default"
       >
-        <img
-          :src="mediaUrl(image.url)"
-          :alt="image.caption ?? entity.name"
-          class="aspect-video w-full object-cover"
+        <button
+          type="button"
+          class="block w-full cursor-zoom-in"
+          :aria-label="`View ${image.caption ?? entity.name} full size`"
+          @click="view(image)"
         >
+          <img
+            :src="mediaUrl(image.url)"
+            :alt="image.caption ?? entity.name"
+            class="aspect-video w-full object-cover"
+          >
+        </button>
 
         <UBadge
           v-if="entity.image_url === image.url"
@@ -226,6 +301,15 @@ async function removeOne(image: EntityImage) {
         </figcaption>
       </figure>
     </div>
+
+    <ImageLightbox
+      v-model:open="lightbox.open"
+      :src="lightbox.src"
+      :caption="lightbox.caption"
+      :pick-focus="lightbox.pickFocus"
+      :focus="coverFocus"
+      @focus-picked="onFocusPicked"
+    />
 
     <input
       ref="input"
