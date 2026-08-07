@@ -41,6 +41,20 @@ const coverFocusStyle = computed(() => {
 })
 
 const headerLightbox = ref(false)
+const playerPreview = ref(false)
+
+/** Backlinks grouped by type — a wall of names hides who is talking about whom */
+const backlinkGroups = computed(() => {
+  const groups = new Map<EntityType, LinkedEntity[]>()
+
+  for (const link of entity.value?.backlinks ?? []) {
+    groups.set(link.type, [...(groups.get(link.type) ?? []), link])
+  }
+
+  return [...groups.entries()]
+    .map(([type, links]) => ({ type, meta: entityTypeMeta(type), links }))
+    .sort((a, b) => b.links.length - a.links.length)
+})
 
 /** Structured `data` fields for this type that actually hold a value */
 const filledFields = computed(() => {
@@ -187,6 +201,15 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           class="rounded-xl"
           :loading="togglingStatus"
           @click="toggleSessionStatus"
+        />
+        <UButton
+          v-if="isDm"
+          label="Player view"
+          icon="i-lucide-eye"
+          color="neutral"
+          variant="outline"
+          class="rounded-xl"
+          @click="playerPreview = true"
         />
         <UButton
           v-if="isDm"
@@ -352,6 +375,12 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           @focus-changed="point => (entity!.data = { ...entity!.data, cover_focus: point })"
         />
 
+        <PlayerPreview
+          v-if="isDm"
+          v-model:open="playerPreview"
+          :entity="entity"
+        />
+
         <ImageLightbox
           v-if="entity.image_url"
           v-model:open="headerLightbox"
@@ -395,28 +424,46 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
         <ContentCard
           title="Mentioned in"
           icon="i-lucide-corner-down-left"
-          :description="entity.backlinks.length ? undefined : 'Nothing links here yet.'"
+          :description="entity.backlinks.length
+            ? `${entity.backlinks.length} ${entity.backlinks.length === 1 ? 'entry mentions' : 'entries mention'} this.`
+            : 'Nothing links here yet.'"
         >
-          <ul
-            v-if="entity.backlinks.length"
-            class="space-y-1"
+          <div
+            v-if="backlinkGroups.length"
+            class="space-y-3"
           >
-            <li
-              v-for="link in entity.backlinks"
-              :key="`${link.id}-${link.relation}`"
+            <div
+              v-for="group in backlinkGroups"
+              :key="group.type"
             >
-              <NuxtLink
-                :to="`/entities/${link.id}`"
-                class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
-              >
+              <p class="mb-1 flex items-center gap-1.5 px-2 text-xs font-medium uppercase tracking-wide text-dimmed">
                 <UIcon
-                  :name="entityTypeMeta(link.type).icon"
-                  class="size-4 shrink-0 text-muted"
+                  :name="group.meta.icon"
+                  class="size-3.5"
                 />
-                <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
-              </NuxtLink>
-            </li>
-          </ul>
+                {{ group.links.length > 1 ? group.meta.plural : group.meta.label }}
+                <span class="tabular-nums">{{ group.links.length }}</span>
+              </p>
+              <ul class="space-y-0.5">
+                <li
+                  v-for="link in group.links"
+                  :key="`${link.id}-${link.relation}`"
+                >
+                  <NuxtLink
+                    :to="`/entities/${link.id}`"
+                    class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
+                  >
+                    <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
+                    <VisibilityBadge
+                      v-if="isDm && link.visibility === 'dm_only'"
+                      :visibility="link.visibility"
+                      class="ml-auto shrink-0"
+                    />
+                  </NuxtLink>
+                </li>
+              </ul>
+            </div>
+          </div>
         </ContentCard>
 
         <ContentCard

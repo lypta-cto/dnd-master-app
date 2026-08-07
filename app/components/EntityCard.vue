@@ -3,7 +3,24 @@ const props = defineProps<{
   entity: EntitySummary
   /** Hide the visibility badge (player views, where everything shown is visible) */
   noVisibility?: boolean
+  /** Selection mode: clicks pick the card instead of opening it */
+  selectable?: boolean
+  selected?: boolean
 }>()
+
+const emit = defineEmits<{
+  toggle: [id: string]
+}>()
+
+// Capture phase: NuxtLink's own handler runs on bubble and bails when the
+// event is already defaulted, so this is what keeps a pick from navigating.
+function onClick(event: MouseEvent) {
+  if (!props.selectable) {
+    return
+  }
+  event.preventDefault()
+  emit('toggle', props.entity.id)
+}
 
 const mediaUrl = useMediaUrl()
 const meta = computed(() => entityTypeMeta(props.entity.type))
@@ -52,8 +69,22 @@ const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'erro
 <template>
   <NuxtLink
     :to="`/entities/${entity.id}`"
-    class="app-card group flex gap-3 p-3 transition-colors hover:border-accented"
+    class="app-card group relative flex gap-3 p-3 transition-colors hover:border-accented"
+    :class="selectable && (selected ? 'border-primary ring-1 ring-primary' : 'cursor-pointer')"
+    @click.capture="onClick"
   >
+    <span
+      v-if="selectable"
+      class="absolute right-2 top-2 flex size-5 items-center justify-center rounded-md border transition-colors"
+      :class="selected ? 'border-primary bg-primary text-inverted' : 'border-accented bg-default'"
+    >
+      <UIcon
+        v-if="selected"
+        name="i-lucide-check"
+        class="size-3.5"
+      />
+    </span>
+
     <img
       v-if="entity.image_url"
       :src="mediaUrl(entity.image_url)"
@@ -77,7 +108,7 @@ const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'erro
           {{ entity.name }}
         </p>
         <VisibilityBadge
-          v-if="!noVisibility"
+          v-if="!noVisibility && !selectable"
           :visibility="entity.visibility"
         />
       </div>

@@ -72,6 +72,55 @@ function queueSave() {
 
 onUnmounted(() => clearTimeout(saveTimer))
 
+/* --- Undo ------------------------------------------------------------------
+ * Mid-fight mistakes are constant: damage on the wrong goblin, a turn skipped.
+ * Every mutation snapshots the whole state first — it's small, and the tracker
+ * already thinks in whole states. Bursts of the same action (± on one creature)
+ * collapse into one step, so undo goes back a decision rather than a click.
+ */
+interface HistoryEntry {
+  label: string
+  state: CombatState
+}
+
+const HISTORY_LIMIT = 30
+const history = ref<HistoryEntry[]>([])
+
+let lastKey = ''
+let lastStamp = 0
+
+function snapshot(label: string, key: string = label) {
+  const now = Date.now()
+  const isBurst = key === lastKey && now - lastStamp < 1500
+  lastKey = key
+  lastStamp = now
+
+  if (isBurst) {
+    return
+  }
+
+  history.value.push({ label, state: JSON.parse(JSON.stringify(state.value)) })
+  if (history.value.length > HISTORY_LIMIT) {
+    history.value.shift()
+  }
+}
+
+async function undo() {
+  const previous = history.value.pop()
+  if (!previous) {
+    return
+  }
+
+  state.value = previous.state
+  lastKey = ''
+  clearTimeout(saveTimer)
+  await persist()
+
+  toast.add({ title: `Undone — ${previous.label}`, icon: 'i-lucide-undo-2', color: 'neutral' })
+}
+
+defineShortcuts({ meta_z: undo })
+
 /** What the table is allowed to know: order, turn, who's down. Never monster HP. */
 async function castInitiative() {
   await cast.set({
@@ -113,6 +162,7 @@ function addCharacter(character: EntitySummary) {
   if (state.value.combatants.some(c => c.entity_id === character.id)) {
     return
   }
+  snapshot(`added ${character.name}`)
   state.value.combatants.push({
     id: nextId(),
     name: character.name,
@@ -132,6 +182,7 @@ function addMonster(monster: EntitySummary) {
   // Same monster many times is normal — number the copies
   const copies = state.value.combatants.filter(c => c.entity_id === monster.id).length
   const hp = Number(monster.data.hp) || null
+  snapshot(`added ${monster.name}`)
   state.value.combatants.push({
     id: nextId(),
     name: copies ? `${monster.name} ${copies + 1}` : monster.name,
@@ -150,6 +201,7 @@ function addCustom() {
   if (!name) {
     return
   }
+  snapshot(`added ${name}`)
   state.value.combatants.push({
     id: nextId(), name, kind: 'custom', initiative: 0,
     max_hp: null, current_hp: null, conditions: []
@@ -160,6 +212,7 @@ function addCustom() {
 
 function removeCombatant(id: string) {
   const index = ordered.value.findIndex(c => c.id === id)
+  snapshot(`removed ${state.value.combatants.find(c => c.id === id)?.name ?? 'a combatant'}`)
   state.value.combatants = state.value.combatants.filter(c => c.id !== id)
 
   // Keep the turn pointing at the same creature where possible
@@ -176,6 +229,7 @@ function removeCombatant(id: string) {
 /* --- Running the fight ------------------------------------------------------ */
 
 function start() {
+  snapshot('start of combat')
   state.value.active = true
   state.value.round = 1
   state.value.turn_index = 0
@@ -198,6 +252,7 @@ function nextTurn() {
   if (!ordered.value.length) {
     return
   }
+  snapshot('next turn', 'turn')
   if (state.value.turn_index >= ordered.value.length - 1) {
     state.value.turn_index = 0
     state.value.round += 1
@@ -208,6 +263,7 @@ function nextTurn() {
 }
 
 function previousTurn() {
+  snapshot('previous turn', 'turn')
   if (state.value.turn_index === 0) {
     if (state.value.round > 1) {
       state.value.round -= 1
@@ -236,6 +292,7 @@ async function setHp(combatant: Combatant, value: number | null) {
 }
 
 async function writeHp(combatant: Combatant, next: number) {
+  snapshot(`HP change on ${combatant.name}`, `hp:${combatant.id}`)
   combatant.current_hp = Math.max(0, Math.min(combatant.max_hp!, next))
   queueSave()
 
@@ -250,6 +307,7 @@ async function writeHp(combatant: Combatant, next: number) {
 }
 
 async function toggleCondition(combatant: Combatant, name: string) {
+  snapshot(`${name} on ${combatant.name}`, `cond:${combatant.id}:${name}`)
   combatant.conditions = combatant.conditions.includes(name)
     ? combatant.conditions.filter(c => c !== name)
     : [...combatant.conditions, name]
@@ -268,6 +326,7 @@ async function toggleCondition(combatant: Combatant, name: string) {
 
 /** d20 for everyone still sitting on 0 — the DM rolls monsters in one click. */
 function rollMissingInitiative() {
+  snapshot('initiative rolls')
   for (const combatant of state.value.combatants) {
     if (combatant.initiative === 0) {
       combatant.initiative = 1 + Math.floor(Math.random() * 20)
@@ -296,6 +355,20 @@ function hpPercent(combatant: Combatant) {
   >
     <template #actions>
       <template v-if="isDm && current">
+        <UTooltip
+          :text="history.length ? `Undo ${history[history.length - 1]!.label}` : 'Nothing to undo'"
+          :kbds="['meta', 'Z']"
+        >
+          <UButton
+            icon="i-lucide-undo-2"
+            color="neutral"
+            variant="ghost"
+            class="rounded-xl"
+            aria-label="Undo"
+            :disabled="!history.length"
+            @click="undo"
+          />
+        </UTooltip>
         <USwitch
           :model-value="casting"
           label="Show on display"
@@ -399,7 +472,11 @@ function hpPercent(combatant: Combatant) {
                 size="sm"
                 class="w-20"
                 :aria-label="`Initiative for ${combatant.name}`"
-                @update:model-value="value => { combatant.initiative = value ?? 0; queueSave() }"
+                @update:model-value="value => {
+                  snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
+                  combatant.initiative = value ?? 0
+                  queueSave()
+                }"
               />
 
               <UIcon

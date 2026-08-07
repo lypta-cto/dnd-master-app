@@ -104,6 +104,22 @@ Ono što kampanju čini stvarnom, ne demo-om.
   napuštanja stranice — completed odmah nestaje iz liste); planirana sesija ima
   **Mark played** koji je odmah pretvara u recap karticu.
 
+**Prolaz 3** ✓ — greške, masovne izmene, provera vidljivosti:
+
+- Borba: **undo** (dugme + ⌘Z) — svaka izmena snima celo stanje pre sebe, a niz
+  klikova na isto stvorenje se sabija u jedan korak, pa undo vraća odluku a ne
+  klik. Vraćeno stanje se odmah snima na server. Istorija drži 30 koraka.
+- Liste entiteta: **Select** režim — obeležiš više kartica i jednim potezom im
+  postaviš vidljivost (DM only / Shared / Public). Klik u tom režimu bira umesto
+  da otvara (capture faza, pre NuxtLink navigacije).
+- **Player view** na svakom entitetu (DM): modal pokazuje tačno šta igrač vidi.
+  dm_only entitet → "igrači ne vide ništa" (API im vraća 404); inače telo sa
+  linkovima koji se za njih ne razrešavaju kao običan tekst, uz spisak koliko
+  pominjanja ostaje skriveno. Sve se računa iz podataka koje je API već poslao,
+  po istom pravilu kao `visibility_filter` na backendu.
+- "Mentioned in" grupisan po tipu sa brojem, i dm_only bedž na pominjanjima koja
+  igrači ne bi videli.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,
