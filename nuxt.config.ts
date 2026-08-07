@@ -1,10 +1,18 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  // Everything meaningful sits behind auth that only the client can resolve
+  // (the API's httpOnly cookie never reaches the Nuxt server). SSR could only
+  // ever render the signed-out shell — and hydrating the real UI over that
+  // shell is precisely the class of DOM-mangling mismatch we hit on pages
+  // branching on the current campaign. A dashboard needs no SEO; render where
+  // the truth lives.
+
   modules: [
     '@nuxt/eslint',
     '@nuxt/fonts',
     '@nuxt/ui'
   ],
+  ssr: false,
 
   devtools: {
     enabled: true
@@ -20,7 +28,7 @@ export default defineNuxtConfig({
   // Override at runtime with NUXT_PUBLIC_API_BASE
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:8000/api/v1'
+      apiBase: 'http://localhost:8001/api/v1'
     }
   },
 

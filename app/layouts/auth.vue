@@ -25,7 +25,7 @@ await load()
     <aside class="relative hidden h-full overflow-hidden lg:flex lg:flex-col p-12 text-white">
       <!-- Slow Ken Burns pan; the wrapper is oversized so no edge ever shows -->
       <img
-        src="/auth-bg.jpg"
+        src="/auth-bg.webp"
         alt=""
         aria-hidden="true"
         class="app-kenburns absolute inset-0 size-full object-cover"
@@ -45,8 +45,8 @@ await load()
           {{ tagline }}
         </p>
         <p class="mt-4 max-w-md text-white/80 drop-shadow">
-          Metrics, users, projects and billing in one place — with the same
-          keyboard shortcuts and the same dark mode everywhere.
+          Campaigns, sessions, NPCs and encounters in one place, so prep takes
+          minutes and the table never waits on you.
         </p>
       </div>
 

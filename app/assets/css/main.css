@@ -8,46 +8,46 @@
 @theme static {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  /* Brand — the blue used for active nav, primary buttons, focus rings */
-  --color-brand-50: #eff5ff;
-  --color-brand-100: #dbe8fe;
-  --color-brand-200: #bfd7fe;
-  --color-brand-300: #93bcfd;
-  --color-brand-400: #609afa;
-  --color-brand-500: #2f7bf6;
-  --color-brand-600: #1b6bf2;
-  --color-brand-700: #1655dc;
-  --color-brand-800: #1846b2;
-  --color-brand-900: #1a3f8c;
-  --color-brand-950: #142755;
+  /* Brand — ember, picked to sit against the torchlight in the login art */
+  --color-brand-50: #fef4ec;
+  --color-brand-100: #fce3cd;
+  --color-brand-200: #f8c39b;
+  --color-brand-300: #f29e64;
+  --color-brand-400: #ea7a38;
+  --color-brand-500: #d95c19;
+  --color-brand-600: #b8470f;
+  --color-brand-700: #94370f;
+  --color-brand-800: #762d13;
+  --color-brand-900: #5f2613;
+  --color-brand-950: #351007;
 
-  /* Ink — cool grey used for surfaces, borders and text */
-  --color-ink-50: #f5f6f8;
-  --color-ink-100: #edeff3;
-  --color-ink-200: #e1e4ea;
-  --color-ink-300: #cbd0da;
-  --color-ink-400: #9aa2b1;
-  --color-ink-500: #6c7689;
-  --color-ink-600: #525b6c;
-  --color-ink-700: #414857;
-  --color-ink-800: #2a303b;
-  --color-ink-900: #1a1f27;
-  --color-ink-950: #10141a;
+  /* Ink — warm grey, so surfaces read like parchment rather than steel */
+  --color-ink-50: #f8f7f5;
+  --color-ink-100: #f0eeea;
+  --color-ink-200: #e4e0da;
+  --color-ink-300: #cec8bf;
+  --color-ink-400: #9d958a;
+  --color-ink-500: #6f6961;
+  --color-ink-600: #55504a;
+  --color-ink-700: #43403b;
+  --color-ink-800: #2c2a27;
+  --color-ink-900: #1c1a18;
+  --color-ink-950: #121110;
 }
 
 :root,
 .light {
   --ui-radius: 0.5rem;
 
-  /* Grey canvas the white cards sit on */
-  --app-canvas: #f1f3f7;
-  --app-card-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 1px 3px rgb(16 24 40 / 6%);
+  /* Warm canvas the cards sit on */
+  --app-canvas: #f5f3ef;
+  --app-card-shadow: 0 1px 2px rgb(40 30 20 / 5%), 0 1px 3px rgb(40 30 20 / 7%);
 }
 
 .dark {
   /* Cards are lighter than the canvas in dark mode, so --ui-bg is lifted */
-  --ui-bg: #151a22;
-  --app-canvas: #0d1117;
+  --ui-bg: #1c1a18;
+  --app-canvas: #121110;
   --app-card-shadow: none;
 }
 
@@ -134,13 +134,18 @@
 }
 
 /* Slow Ken Burns drift for the auth background photo */
+/*
+ * Kept shallow (1.06, not 1.14). `object-cover` already upscales the artwork to
+ * fill a tall half-screen panel, and every extra percent of zoom is softness on
+ * top of that.
+ */
 @keyframes app-kenburns {
   from {
     transform: scale(1) translate3d(0, 0, 0);
   }
 
   to {
-    transform: scale(1.14) translate3d(-1.5%, -1%, 0);
+    transform: scale(1.06) translate3d(-1%, -0.5%, 0);
   }
 }
 
@@ -163,9 +168,12 @@
   }
 }
 
-html {
-  scrollbar-gutter: stable;
-}
+/*
+ * No `scrollbar-gutter` on <html> on purpose. Both shells pin themselves to the
+ * viewport — the dashboard is `fixed inset-0`, the auth screen is `h-svh
+ * overflow-hidden` — so the document never scrolls and a reserved gutter would
+ * only show up as a dead strip down the right edge of the login artwork.
+ */
 
 /*
  * Font choices offered in Settings → Appearance.

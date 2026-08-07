@@ -1,0 +1,91 @@
+# DM Master — plan razrade
+
+Tri površine, tri posla:
+
+| Površina | Ko | Posao |
+| --- | --- | --- |
+| **DM aplikacija** | Ti | Sve: prep, vođenje sesije, kontrole |
+| **Cast displej** | Sto (TV / drugi ekran) | Samo ono što DM izabere da pokaže |
+| **Igrački pogled** | Igrači | Njihov sheet + podeljeni lore. Papir ostaje glavni |
+
+Temelj (gotovo, provereno): jedna `entity` kičma za sve tipove, `[[wiki linkovi]]` iz
+proze → pravi linkovi + backlinkovi, full-text pretraga sa težinama, vidljivost
+`dm_only/shared/public` na svakom entitetu, cast kanal preko SSE sa display tokenom.
+
+---
+
+## Faza A — dubina sadržaja *(A1–A4 gotovo)*
+
+Ono što kampanju čini stvarnom, ne demo-om.
+
+- **A1. Tipizovana polja po tipu** — NPC: rasa, zanimanje, status (živ/mrtav/nestao),
+  glas/manir; lokacija: vrsta, region; predmet: retkost, attunement; frakcija: cilj,
+  vođa. Sve u postojećem JSONB `data` — bez migracija, samo forma i prikaz.
+- **A2. Slideshow cast** — više slika u rotaciji sa natpisima i intervalom; DM bira
+  entitete sa slikama i kastuje ceo set (uvod u sesiju, "previously on…").
+- **A3. Stranica kampanje** — izmena imena/opisa, lista članova, pozivanje igrača po
+  emailu, uklanjanje, uloge. Backend postoji; UI fali.
+- **A4. Galerija po entitetu** ✓ — više slika po entitetu sa natpisima; prva postaje
+  cover, bilo koja se kastuje ili ulazi u slideshow; brisanje briše tačno taj fajl i
+  cover se sam prebaci na sledeću.
+- **A5. Preimenovanje sa prepravkom referenci** ✓ — preimenovanje automatski
+  prepravlja `[[stare reference]]` po telima (labela u `[[Ime|labela]]` preživi) i
+  ponovo razrešava prozu koja je već pominjala novo ime; UI javi koliko je unosa
+  izmenjeno.
+
+## Faza B — igrači i karakteri *(B1 gotovo)*
+
+- **B1. Karakter kao entitet** ✓ — tip `character` sa `owner_id`; igrač kreira i
+  menja samo svog (vidljivost ne), vlasnik uvek vidi svoj sheet ma kako sakriven.
+  Sheet je tracker sa autosave-om: HP/temp (šteta prvo jede temp), spell slotovi po
+  nivou, stanja, inspiracija, death saves. Bez rules engine-a — papir je izvor istine.
+- **B2. Igrački dashboard** — moj karakter + podeljeni lore + poslednji recap. To je
+  90% onoga što igrač ikad vidi.
+- **B3. Party pregled** ✓ — `/party`: svi karakteri sa HP barom, stanjima, AC/level;
+  brzo ±HP direktno sa pregleda (temp se troši prvi), optimistički update. DM svuda,
+  igrač na svom. Sesija uz to ima Mark-as-played/Reopen tok sa svoje stranice.
+
+## Faza C — vođenje sesije
+
+- **C1. Statblokovi** ✓ — tip `monster`: kind/CR/AC/HP/speed/abilities kao polja,
+  akcije u markdown telu. Podrazumevano dm_only.
+- **C2. Combat tracker** ✓ — `/combat`: dodavanje partije jednim klikom (HP sa
+  sheeta), čudovišta sa auto-numeracijom kopija, custom redovi; inicijativa, runde,
+  next/prev, ±HP, brza stanja. Šteta karaktera se upisuje nazad u sheet. **Cast mod
+  `initiative`** uživo: sto vidi redosled, ko je na potezu i ko je pao — nikad HP.
+  End combat čisti displej.
+- **C3. Sesije** ✓ *(povučeno napred)* — tipovi `session` (broj, datum,
+  planned/played; prep i recap u telu sa `[[linkovima]]`) i `quest` (status, davalac,
+  nagrada). **Dashboard je glava priče**: poslednji recap sa živim linkovima, sledeća
+  planirana sesija, party sa HP, otvoreni questovi. Ostaje: checklist UI za prep.
+- **C4. Brze beleške u igri** — jedan input uvek dostupan (⌘J?): upiši ime/događaj u
+  toku igre, postane `note` sa datumom sesije, središ posle.
+
+## Faza D — mape i svet
+
+- **D1. Mape** — slika + pinovi, svaki pin → entitet. Pin nasleđuje vidljivost
+  entiteta. Cast mod `map` sa izborom šta sto vidi. *Ne* virtuelni sto — bez fog of
+  war, bez pomeranja figura.
+- **D2. Kalendar sveta** *(opciono)* — in-world datum na sesijama i beleškama.
+
+## Faza E — završnica
+
+- **E1. Audio (poslednje, dogovoreno)** — linkovanje YouTube/Spotify plejliste po
+  sceni/lokaciji. Embed + URL polje; bez hostovanja fajlova.
+- **E2. Handouts** — entitet/slika označen kao handout, igrači ga vide u svom pogledu
+  kad ga "predaš" (visibility flip + notifikacija).
+- **E3. Kockice na displeju** *(razmotriti)* — DM baci d20 i rezultat se pokaže na
+  castu radi drame. Malo koda, veliki efekat za stolom.
+
+### Namerno van plana (za sada)
+
+Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,
+tokeni) · glasanja igrača · real-time kolaboracija u pisanju · mobilna aplikacija.
+Sve se može dodati kasnije, ništa od toga ne blokira gore navedeno.
+
+### Tehnički dug koji čeka pravi trenutak
+
+- E2E test za cast tok (SSE) — sad je pokriveno ručnom proverom
+- Postgres LISTEN/NOTIFY umesto in-memory brokera kad backend dobije više workera
+- Slike na S3/R2 pre produkcije (lokalni disk je jednomašinski)
+- Neon baza + deploy — kad kažeš da izlazimo iz lokalnog razvoja

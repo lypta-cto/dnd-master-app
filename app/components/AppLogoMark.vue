@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * The brand mark. Uses `currentColor`, so set the colour on the parent
- * (`text-primary`, `text-white`, …). Replace this file to rebrand — nothing
- * else references the shapes.
+ * PLACEHOLDER — a d20 silhouette until the real mark arrives.
+ *
+ * Uses `currentColor`, so the colour comes from the parent (`text-primary`,
+ * `text-white`, …). Replace the paths here to rebrand; nothing else in the app
+ * references the shapes.
  */
 </script>
 
@@ -11,37 +13,19 @@
     viewBox="0 0 32 32"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
     aria-hidden="true"
   >
-    <rect
-      x="2.5"
-      y="2.5"
-      width="13"
-      height="13"
-      rx="4.2"
-      fill="currentColor"
-    />
-    <rect
-      x="16.5"
-      y="16.5"
-      width="13"
-      height="13"
-      rx="4.2"
-      fill="currentColor"
-    />
-    <circle
-      cx="24"
-      cy="8"
-      r="5.2"
-      fill="currentColor"
-      opacity="0.45"
-    />
-    <circle
-      cx="8"
-      cy="24"
-      r="5.2"
-      fill="currentColor"
-      opacity="0.45"
-    />
+    <!-- Outer icosahedron silhouette -->
+    <path d="M16 2 28.1 9v14L16 30 3.9 23V9L16 2Z" />
+
+    <!-- The face you actually read the number off -->
+    <path d="M16 7.5 24.5 22h-17L16 7.5Z" />
+
+    <!-- Edges tying the face to the silhouette -->
+    <path d="M16 7.5V2M24.5 22l3.6 1M7.5 22l-3.6 1" />
   </svg>
 </template>

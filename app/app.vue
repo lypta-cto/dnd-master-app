@@ -8,8 +8,13 @@ const { name: appName } = useWorkspace()
 // The session is restored from the API's httpOnly cookie on the client, so
 // hold the shell back until we know who (if anyone) is signed in — otherwise
 // the dashboard flashes before the middleware can redirect to /login.
+// The display route is exempt: it's a TV with a token, auth never resolves
+// there and the splash would sit forever.
 const { ready } = useAuth()
-const showApp = computed(() => import.meta.server || ready.value)
+const route = useRoute()
+const showApp = computed(
+  () => import.meta.server || ready.value || route.path.startsWith('/display/')
+)
 
 useHead({
   titleTemplate: title => (title ? `${title} · ${appName.value}` : appName.value),

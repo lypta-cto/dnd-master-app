@@ -1,10 +1,10 @@
 <template>
   <AppPage
-    title="Help & support"
+    title="Help &amp; support"
     description="Documentation, guides and contact options."
     :breadcrumb="[
       { icon: 'i-lucide-house', to: '/' },
-      { label: 'Help & support' }
+      { label: 'Help &amp; support' }
     ]"
   >
     <EmptyState

@@ -1,15 +1,29 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
-/**
- * Single source of truth for the sidebar navigation.
- *
- * Deliberately minimal — sections get added as the MVP takes shape. Each entry
- * needs a matching page under app/pages.
- */
+/** Sidebar navigation. Entity types share one page, filtered by query. */
 export function useNavigation() {
+  const route = useRoute()
+  const { isDm } = useCampaigns()
+
   const mainNav = computed<NavigationMenuItem[][]>(() => [
     [
-      { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' }
+      { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
+      { label: 'Party', icon: 'i-lucide-users-round', to: '/party' }
+    ],
+    ENTITY_TYPES.map(type => ({
+      label: type.plural,
+      icon: type.icon,
+      to: `/entities?type=${type.value}`,
+      active: route.path === '/entities' && route.query.type === type.value
+    })),
+    [
+      { label: 'Campaign', icon: 'i-lucide-swords', to: '/campaign' },
+      ...(isDm.value
+        ? [
+            { label: 'Combat', icon: 'i-lucide-swords', to: '/combat' },
+            { label: 'Cast screen', icon: 'i-lucide-cast', to: '/cast' }
+          ]
+        : [])
     ]
   ])
 

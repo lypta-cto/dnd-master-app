@@ -19,7 +19,7 @@ const fields: AuthFormField[] = [
     type: 'email',
     label: 'Email',
     placeholder: 'you@company.com',
-    defaultValue: 'admin@example.com',
+    defaultValue: 'luka.savovic@lypta.ai',
     required: true
   },
   {

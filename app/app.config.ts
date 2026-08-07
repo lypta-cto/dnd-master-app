@@ -1,8 +1,9 @@
 export default defineAppConfig({
-  // Per-app branding — the mark itself lives in components/AppLogoMark.vue
+  // Fallbacks used until the workspace loads from the API. The live values are
+  // editable in Settings → Workspace.
   app: {
-    name: 'Lypta Admin',
-    tagline: 'One dashboard for every part of the business.'
+    name: 'DM Master',
+    tagline: 'Run the table, not the paperwork.'
   },
 
   ui: {

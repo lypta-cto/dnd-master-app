@@ -1,10 +1,17 @@
 /** Routes reachable without a session */
 const PUBLIC_ROUTES = ['/login', '/register']
 
+/** Route prefixes that are public — the cast display is a TV, not a person */
+const PUBLIC_PREFIXES = ['/display/']
+
 export default defineNuxtRouteMiddleware(async (to) => {
   // The refresh cookie belongs to the API's origin, so the Nuxt server can't
   // see it. Auth is resolved on the client; SSR just renders the empty shell.
   if (import.meta.server) {
+    return
+  }
+
+  if (PUBLIC_PREFIXES.some(prefix => to.path.startsWith(prefix))) {
     return
   }
 

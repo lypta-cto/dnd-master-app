@@ -1,0 +1,188 @@
+<script setup lang="ts">
+const props = defineProps<{
+  /** Existing entity when editing; omit when creating */
+  entity?: EntityDetail
+  type: EntityType
+  /** Prefill for "create from unresolved link" */
+  initialName?: string
+}>()
+
+const emit = defineEmits<{
+  saved: [entity: EntityDetail]
+}>()
+
+const toast = useToast()
+const entities = useEntities()
+const { isDm } = useCampaigns()
+
+const meta = computed(() => entityTypeMeta(props.type))
+
+const typeFields = computed(() => TYPE_FIELDS[props.type] ?? [])
+
+const form = reactive({
+  name: props.entity?.name ?? props.initialName ?? '',
+  summary: props.entity?.summary ?? '',
+  body: props.entity?.body ?? '',
+  visibility: (props.entity?.visibility ?? 'dm_only') as Visibility,
+  tags: [...(props.entity?.tags ?? [])] as string[],
+  data: { ...(props.entity?.data ?? {}) } as Record<string, unknown>
+})
+
+const saving = ref(false)
+
+const visibilityItems = VISIBILITIES.map(v => ({
+  value: v.value,
+  label: v.label,
+  icon: v.icon
+}))
+
+async function submit() {
+  if (!form.name.trim()) {
+    return
+  }
+
+  saving.value = true
+
+  try {
+    // Empty structured fields are dropped so `data` stays clean
+    const data = Object.fromEntries(
+      Object.entries(form.data).filter(([, value]) => value !== '' && value != null)
+    )
+
+    const payload = {
+      name: form.name.trim(),
+      summary: form.summary.trim() || null,
+      body: form.body || null,
+      visibility: form.visibility,
+      tags: form.tags,
+      data
+    }
+
+    const saved = props.entity
+      ? await entities.update(props.entity.id, payload)
+      : await entities.create({ ...payload, type: props.type })
+
+    if (saved.rewritten_references) {
+      toast.add({
+        title: `Updated [[links]] in ${saved.rewritten_references} other entr${saved.rewritten_references === 1 ? 'y' : 'ies'}`,
+        description: 'Renaming carries your prose along with it.',
+        icon: 'i-lucide-replace',
+        color: 'info'
+      })
+    }
+
+    if (saved.unresolved_links.length) {
+      toast.add({
+        title: `${saved.unresolved_links.length} unresolved link(s)`,
+        description: `No entity yet for: ${saved.unresolved_links.join(', ')}`,
+        icon: 'i-lucide-unlink',
+        color: 'warning'
+      })
+    }
+
+    emit('saved', saved)
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <form
+    class="space-y-5"
+    @submit.prevent="submit"
+  >
+    <div class="grid gap-4 sm:grid-cols-2">
+      <UFormField
+        label="Name"
+        required
+      >
+        <UInput
+          v-model="form.name"
+          :placeholder="meta.label"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField
+        v-if="isDm"
+        label="Visibility"
+        :help="VISIBILITIES.find(v => v.value === form.visibility)?.hint"
+      >
+        <USelectMenu
+          v-model="form.visibility"
+          :items="visibilityItems"
+          value-key="value"
+          class="w-full"
+        />
+      </UFormField>
+    </div>
+
+    <UFormField label="Summary">
+      <UInput
+        v-model="form.summary"
+        placeholder="One line that shows up in lists and search."
+        class="w-full"
+      />
+    </UFormField>
+
+    <UFormField
+      label="Body"
+      help="Markdown. Write [[Entity Name]] to link — links resolve on save, and unresolved names are reported, not lost."
+    >
+      <UTextarea
+        v-model="form.body"
+        :rows="14"
+        placeholder="The [[Goblin King]] fled toward [[Blackmoor Keep]]…"
+        class="w-full font-mono text-sm"
+      />
+    </UFormField>
+
+    <div
+      v-if="typeFields.length"
+      class="grid gap-4 sm:grid-cols-2"
+    >
+      <UFormField
+        v-for="field in typeFields"
+        :key="field.key"
+        :label="field.label"
+      >
+        <USelectMenu
+          v-if="field.options"
+          :model-value="(form.data[field.key] as string | undefined)"
+          :items="field.options"
+          :placeholder="field.label"
+          class="w-full capitalize"
+          @update:model-value="value => (form.data[field.key] = value)"
+        />
+        <UInput
+          v-else
+          :model-value="(form.data[field.key] as string | undefined) ?? ''"
+          :placeholder="field.placeholder"
+          class="w-full"
+          @update:model-value="value => (form.data[field.key] = value)"
+        />
+      </UFormField>
+    </div>
+
+    <UFormField label="Tags">
+      <UInputTags
+        v-model="form.tags"
+        placeholder="Add a tag and press Enter"
+        class="w-full"
+      />
+    </UFormField>
+
+    <div class="flex justify-end gap-2">
+      <slot name="secondary" />
+      <UButton
+        type="submit"
+        :label="entity ? 'Save changes' : `Create ${meta.label}`"
+        :loading="saving"
+        :disabled="!form.name.trim()"
+      />
+    </div>
+  </form>
+</template>

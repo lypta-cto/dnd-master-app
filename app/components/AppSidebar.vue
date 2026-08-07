@@ -46,6 +46,8 @@ const collapsed = ref(false)
     </template>
 
     <template #default="{ collapsed: isCollapsed }">
+      <CampaignSwitcher :collapsed="isCollapsed" />
+
       <UNavigationMenu
         :items="mainNav"
         :collapsed="isCollapsed"

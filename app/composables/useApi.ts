@@ -1,9 +1,11 @@
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
+/** Anything JSON-serialisable; FormData passes through for uploads */
+export type ApiBody = object | FormData | undefined
+
 export interface ApiOptions {
   method?: HttpMethod
-  /** Objects are sent as JSON; FormData passes through so uploads keep their boundary */
-  body?: Record<string, unknown> | FormData | undefined
+  body?: ApiBody
   query?: Record<string, unknown>
   headers?: Record<string, string>
 }
@@ -62,6 +64,8 @@ export function useApi() {
       request<T>(path, { ...options, method: 'POST', body }),
     patch: <T>(path: string, body?: ApiOptions['body'], options?: ApiOptions) =>
       request<T>(path, { ...options, method: 'PATCH', body }),
+    put: <T>(path: string, body?: ApiOptions['body'], options?: ApiOptions) =>
+      request<T>(path, { ...options, method: 'PUT', body }),
     del: <T>(path: string, options?: ApiOptions) => request<T>(path, { ...options, method: 'DELETE' })
   }
 }
