@@ -6,6 +6,8 @@ export interface EntitySummary {
   id: string
   type: EntityType
   owner_id: string | null
+  /** Characters only: whose seat at the table this sheet belongs to */
+  player_id: string | null
   name: string
   slug: string
   summary: string | null
@@ -65,7 +67,8 @@ export interface CampaignImage extends EntityImage {
 
 export interface EntityWrite {
   name?: string
-  owner_id?: string | null
+  /** Characters only, DM only: hand the sheet to a seat at the table */
+  player_id?: string | null
   summary?: string | null
   body?: string | null
   tags?: string[]

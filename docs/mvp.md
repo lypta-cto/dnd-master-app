@@ -140,6 +140,27 @@ sopstveni lik). Nađeno i popravljeno:
   liste kažu "Shared with you in …" umesto "Everything in …", prazno stanje više
   ne piše "No npcs yet".
 
+## Kampanja kao sistem — korak 1: igrači i likovi ✓
+
+Osoba za stolom više nije nalog. `players` tabela po kampanji (ime, kontakt,
+iskustvo, šta ga vuče: combat/roleplay/puzzles/exploration), a `user_id` na njoj
+je opcion i uglavnom prazan. Lik dobija `player_id` — čiji je za stolom —
+odvojeno od `owner_id`, koji i dalje jedini određuje ko sme da menja. Zato DM
+unese osmoro ljudi za minut, bez ijedne registracije.
+
+Nalog dolazi kasnije ili nikad: poziv na adresu koja već ima nalog odmah povezuje
+i predaje mu njegove sheetove; poziv na adresu bez naloga se pamti, pa
+registracija preuzima mesto. Prebacivanje lika na mesto bez naloga oduzima pravo
+izmene, brisanje igrača ostavlja likove u kampanji.
+
+U UI-ju: „The table" na Campaign stranici (brzi unos imena, meni po redu za
+Edit / Invite / Remove), izbor igrača u formi lika, i „played by …" na Party
+stranici.
+
+Sledeće po dogovoru: metapodaci kampanje (`campaign.data`) + wizard za otvaranje
+(naziv → premise → truth → villain → twist), pa DM-only polja („igrači misle X,
+istina je Y"), pa scene/encounter/clue, pa run mode.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,

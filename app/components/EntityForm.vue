@@ -19,8 +19,26 @@ const meta = computed(() => entityTypeMeta(props.type))
 
 const typeFields = computed(() => TYPE_FIELDS[props.type] ?? [])
 
+/* Characters belong to someone at the table — the DM says who */
+const players = usePlayers()
+const roster = ref<Player[]>([])
+
+const isCharacter = computed(() => props.type === 'character')
+
+onMounted(async () => {
+  if (isCharacter.value && isDm.value) {
+    roster.value = await players.list()
+  }
+})
+
+const playerItems = computed(() => [
+  { value: null, label: 'Nobody yet' },
+  ...roster.value.map(player => ({ value: player.id, label: player.name }))
+])
+
 const form = reactive({
   name: props.entity?.name ?? props.initialName ?? '',
+  player_id: props.entity?.player_id ?? null as string | null,
   summary: props.entity?.summary ?? '',
   body: props.entity?.body ?? '',
   visibility: (props.entity?.visibility ?? 'dm_only') as Visibility,
@@ -55,7 +73,9 @@ async function submit() {
       body: form.body || null,
       visibility: form.visibility,
       tags: form.tags,
-      data
+      data,
+      // Only the DM hands a sheet to a seat; players always get their own
+      ...(isCharacter.value && isDm.value ? { player_id: form.player_id } : {})
     }
 
     const saved = props.entity
@@ -102,6 +122,19 @@ async function submit() {
         <UInput
           v-model="form.name"
           :placeholder="meta.label"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField
+        v-if="isCharacter && isDm"
+        label="Player"
+        help="Whose character this is at the table."
+      >
+        <USelectMenu
+          v-model="form.player_id"
+          :items="playerItems"
+          value-key="value"
           class="w-full"
         />
       </UFormField>

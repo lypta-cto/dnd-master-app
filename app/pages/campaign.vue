@@ -7,7 +7,6 @@ const {
   update,
   remove,
   members: fetchMembers,
-  invite,
   removeMember
 } = useCampaigns()
 const { user } = useAuth()
@@ -18,9 +17,6 @@ const saving = ref(false)
 
 const members = ref<CampaignMember[]>([])
 const membersLoading = ref(true)
-
-const inviteForm = reactive({ email: '', role: 'player' as CampaignRole })
-const inviting = ref(false)
 
 async function load() {
   if (!current.value) {
@@ -62,36 +58,6 @@ async function save() {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
     saving.value = false
-  }
-}
-
-async function sendInvite() {
-  if (!current.value || !inviteForm.email.trim()) {
-    return
-  }
-
-  inviting.value = true
-  try {
-    const member = await invite(current.value.id, {
-      email: inviteForm.email.trim(),
-      role: inviteForm.role
-    })
-    members.value = [...members.value, member]
-    inviteForm.email = ''
-    toast.add({
-      title: `${member.user.full_name || member.user.email} joined`,
-      icon: 'i-lucide-user-plus',
-      color: 'success'
-    })
-  } catch (error) {
-    toast.add({
-      title: apiErrorMessage(error, 'Could not invite'),
-      description: 'Players need an account first — they register themselves.',
-      icon: 'i-lucide-circle-alert',
-      color: 'error'
-    })
-  } finally {
-    inviting.value = false
   }
 }
 
@@ -215,11 +181,15 @@ async function destroyCampaign() {
           </p>
         </ContentCard>
 
-        <!-- Players -->
+        <PlayerRoster :is-dm="isDm" />
+
+        <!-- Accounts with access. The roster above is the table; this is the
+             door — a DM co-running the game, or a player who signed in. -->
         <ContentCard
-          title="Players"
-          icon="i-lucide-users"
-          :description="isDm ? 'Invite by email — they need an account first.' : undefined"
+          v-if="isDm"
+          title="Accounts"
+          icon="i-lucide-key-round"
+          description="Who can sign in to this campaign."
           flush
         >
           <div
@@ -227,7 +197,7 @@ async function destroyCampaign() {
             class="space-y-2 p-4 sm:p-5"
           >
             <USkeleton
-              v-for="i in 3"
+              v-for="i in 2"
               :key="i"
               class="h-12 rounded-xl"
             />
@@ -263,41 +233,16 @@ async function destroyCampaign() {
                 variant="subtle"
               />
               <UButton
-                v-if="isDm && member.role !== 'dm'"
+                v-if="member.role !== 'dm'"
                 icon="i-lucide-user-minus"
                 color="neutral"
                 variant="ghost"
                 size="sm"
-                aria-label="Remove player"
+                aria-label="Revoke access"
                 @click="kick(member)"
               />
             </li>
           </ul>
-
-          <form
-            v-if="isDm"
-            class="flex flex-wrap items-end gap-2 border-t border-default p-4 sm:px-5"
-            @submit.prevent="sendInvite"
-          >
-            <UFormField
-              label="Invite a player"
-              class="min-w-48 flex-1"
-            >
-              <UInput
-                v-model="inviteForm.email"
-                type="email"
-                placeholder="player@example.com"
-                class="w-full"
-              />
-            </UFormField>
-            <UButton
-              type="submit"
-              label="Invite"
-              icon="i-lucide-user-plus"
-              :loading="inviting"
-              :disabled="!inviteForm.email.trim()"
-            />
-          </form>
         </ContentCard>
       </div>
 

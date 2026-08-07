@@ -11,6 +11,14 @@ const toast = useToast()
 const mediaUrl = useMediaUrl()
 
 const characters = ref<EntitySummary[]>([])
+
+/* Who is playing each sheet — the party page is where that matters most */
+const players = usePlayers()
+const roster = ref<Player[]>([])
+
+function playerName(character: EntitySummary) {
+  return roster.value.find(p => p.id === character.player_id)?.name ?? null
+}
 const loading = ref(true)
 const savingId = ref<string | null>(null)
 
@@ -22,7 +30,12 @@ async function load() {
 
   loading.value = true
   try {
-    characters.value = (await entities.list({ type: 'character', page_size: 100 })).items
+    const [page, seats] = await Promise.all([
+      entities.list({ type: 'character', page_size: 100 }),
+      players.list()
+    ])
+    characters.value = page.items
+    roster.value = seats
   } finally {
     loading.value = false
   }
@@ -161,6 +174,12 @@ function subtitle(character: EntitySummary) {
               </span>
               <span class="block truncate text-xs text-muted">
                 {{ subtitle(character) || 'No class set' }}
+              </span>
+              <span
+                v-if="playerName(character)"
+                class="block truncate text-xs text-dimmed"
+              >
+                played by {{ playerName(character) }}
               </span>
             </span>
           </NuxtLink>
