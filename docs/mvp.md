@@ -264,6 +264,22 @@ atmosferu, nose premise i ton kampanje, i završavaju se pravilom o jeziku — b
 toga je na srpski brief vraćao engleski tekst. Tekst i slike su odvojeni moduli
 jer različito otkazuju i različito koštaju.
 
+Cena je izbor po slici, ne skriveno podešavanje: **Draft (~1¢)** i **Good
+(~4¢)**, a odgovor nosi stvarni broj tokena pretvoren u cente pa toast kaže
+šta je klik koštao. Mutne slike nisu bile stvar kvaliteta nego prompta —
+"dramatic lighting, muted palette" je vraćalo tačno to; traženje oštrine i
+čitljivih oblika popravilo je i jeftini nivo.
+
+### Sidebar
+
+Grupisan po tome **kada se otvara**, ne po tipu. Gore ravno ono što se dira dok
+igrači sede za stolom (dashboard, party, likovi, pa run/combat/cast), a priprema
+pada u dve sekcije: **Story** (sesije, scene, susreti, questovi, tragovi) i
+**World** (lokacije, NPC-evi, frakcije, čudovišta, predmeti, mape). Novi tipovi
+ulaze u sekciju umesto da produžavaju spisak. Sekcija se sama otvara kad si u
+njoj — meni je kejovan na aktivnu sekciju, jer `defaultOpen` važi samo pri
+montiranju pa bi dolazak na scenu kroz pretragu ostavio Story zatvoren.
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,
