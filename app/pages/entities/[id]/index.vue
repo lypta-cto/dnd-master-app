@@ -369,7 +369,7 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
         </ContentCard>
 
         <EntityGallery
-          v-if="isDm"
+          v-if="canWrite"
           :entity="entity"
           @cover-changed="url => (entity!.image_url = url)"
           @focus-changed="point => (entity!.data = { ...entity!.data, cover_focus: point })"

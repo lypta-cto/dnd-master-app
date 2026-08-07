@@ -115,8 +115,45 @@ async function undo() {
   lastKey = ''
   clearTimeout(saveTimer)
   await persist()
+  await syncCharacterSheets()
 
   toast.add({ title: `Undone — ${previous.label}`, icon: 'i-lucide-undo-2', color: 'neutral' })
+}
+
+/**
+ * Rewinding the fight has to rewind the sheets with it.
+ *
+ * HP and conditions flow to character entities as they change, so an undo that
+ * only restored the tracker would leave the party page (and the player's own
+ * view) showing damage the fight no longer remembers.
+ */
+async function syncCharacterSheets() {
+  const writes = state.value.combatants
+    .filter(combatant => combatant.kind === 'character' && combatant.entity_id)
+    .map(async (combatant) => {
+      const sheet = characters.value.find(c => c.id === combatant.entity_id)
+      if (!sheet) {
+        return
+      }
+
+      const data = {
+        ...sheet.data,
+        current_hp: combatant.current_hp,
+        conditions: [...combatant.conditions]
+      }
+
+      if (
+        sheet.data.current_hp === data.current_hp
+        && JSON.stringify(sheet.data.conditions ?? []) === JSON.stringify(data.conditions)
+      ) {
+        return
+      }
+
+      sheet.data = data
+      await entities.update(combatant.entity_id!, { data })
+    })
+
+  await Promise.all(writes)
 }
 
 defineShortcuts({ meta_z: undo })

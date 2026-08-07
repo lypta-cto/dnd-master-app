@@ -120,6 +120,26 @@ Ono što kampanju čini stvarnom, ne demo-om.
 - "Mentioned in" grupisan po tipu sa brojem, i dm_only bedž na pominjanjima koja
   igrači ne bi videli.
 
+**Prolaz 4** ✓ — prolazak kroz aplikaciju očima igrača (pravi nalog, član kampanje,
+sopstveni lik). Nađeno i popravljeno:
+
+- **Curenje sesije pri odjavi.** `campaigns` (sa `my_role`) je preživljavao odjavu,
+  pa je sledeći nalog u istom tabu nasleđivao prethodnu ulogu — DM-ova dugmad na
+  igračevom ekranu, sve do punog reload-a. Sada se stanje po nalogu briše na
+  prijavi, registraciji i odjavi (`useAuth`, ne `useAuthState` — taj sloj ostaje
+  bez zavisnosti).
+- **Campaign stranica je bila otvorena igraču** sa poljima za izmenu i linkom na
+  cast ekran. Sada DM vidi podešavanja, igrač read-only "About" + spisak igrača.
+- **Undo u borbi nije vraćao HP na sheetove** — tracker bi se vratio, a party
+  stranica i igračev pogled ostajali na staroj šteti. Undo sada vraća i sheetove.
+- **Galerija je bila DM-only, iako igrač sme da menja svoj lik** — nedosledno sa
+  `_can_write`. Rute za slike sada koriste isto pravilo (`_load_writable`), pa
+  igrač može da doda portret svom liku, a tuđ entitet i dalje odbija (403, ili
+  404 za dm_only — postojanje se ne odaje). Dva nova testa.
+- Šum u navigaciji i tekstu: bestijarij i brojač monstruma sakriveni igračima,
+  liste kažu "Shared with you in …" umesto "Everything in …", prazno stanje više
+  ne piše "No npcs yet".
+
 ### Namerno van plana (za sada)
 
 Rules engine i uvoz SRD podataka · character builder · virtuelni sto (fog of war,

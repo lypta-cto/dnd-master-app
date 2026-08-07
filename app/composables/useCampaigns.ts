@@ -67,6 +67,18 @@ export function useCampaigns() {
     currentId.value = id
   }
 
+  /**
+   * Drop everything cached about campaigns.
+   *
+   * Called when the session changes: the list carries `my_role`, so without
+   * this the next person to sign in on the same tab inherits the previous
+   * user's role until a hard reload — a DM's buttons on a player's screen.
+   */
+  function reset() {
+    campaigns.value = []
+    loaded.value = false
+  }
+
   async function create(payload: { name: string, summary?: string | null }) {
     const campaign = await api.post<CampaignDetail>('/campaigns', payload)
     campaigns.value = [campaign, ...campaigns.value]
@@ -106,6 +118,7 @@ export function useCampaigns() {
     loaded,
     load,
     select,
+    reset,
     create,
     update,
     remove,

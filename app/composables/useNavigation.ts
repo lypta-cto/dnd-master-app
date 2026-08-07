@@ -10,7 +10,8 @@ export function useNavigation() {
       { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
       { label: 'Party', icon: 'i-lucide-users-round', to: '/party' }
     ],
-    ENTITY_TYPES.map(type => ({
+    // The bestiary is prep, not table-facing — players never need the link
+    ENTITY_TYPES.filter(type => isDm.value || type.value !== 'monster').map(type => ({
       label: type.plural,
       icon: type.icon,
       to: `/entities?type=${type.value}`,

@@ -10,6 +10,7 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const { confirm } = useConfirm()
+const { isDm } = useCampaigns()
 const entities = useEntities()
 const cast = useCast()
 const mediaUrl = useMediaUrl()
@@ -293,7 +294,10 @@ async function removeOne(image: EntityImage) {
 
         <!-- Hover controls -->
         <div class="absolute inset-x-0 top-0 flex justify-end gap-1 bg-gradient-to-b from-black/60 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <UTooltip text="Cast to the table">
+          <UTooltip
+            v-if="isDm"
+            text="Cast to the table"
+          >
             <UButton
               icon="i-lucide-cast"
               size="xs"

@@ -140,7 +140,11 @@ async function destroyCampaign() {
 <template>
   <AppPage
     title="Campaign"
-    :description="current ? `Settings and players for ${current.name}.` : 'Select a campaign first.'"
+    :description="!current
+      ? 'Select a campaign first.'
+      : isDm
+        ? `Settings and players for ${current.name}.`
+        : `Who you're playing ${current.name} with.`"
     :breadcrumb="[
       { icon: 'i-lucide-house', to: '/' },
       { label: 'Campaign' }
@@ -158,8 +162,9 @@ async function destroyCampaign() {
       class="grid gap-4 lg:grid-cols-3"
     >
       <div class="space-y-4 lg:col-span-2">
-        <!-- Basics -->
+        <!-- Basics — the DM's settings; players get the read-only card below -->
         <ContentCard
+          v-if="isDm"
           title="Basics"
           icon="i-lucide-swords"
         >
@@ -194,6 +199,20 @@ async function destroyCampaign() {
               />
             </div>
           </div>
+        </ContentCard>
+
+        <!-- What a player needs from this page: what we're playing, and who with -->
+        <ContentCard
+          v-if="!isDm"
+          title="About"
+          icon="i-lucide-swords"
+        >
+          <p class="font-medium text-highlighted">
+            {{ current.name }}
+          </p>
+          <p class="mt-1 text-sm text-muted">
+            {{ current.summary || 'Your DM hasn\'t written a summary yet.' }}
+          </p>
         </ContentCard>
 
         <!-- Players -->
@@ -284,6 +303,7 @@ async function destroyCampaign() {
 
       <div class="space-y-4">
         <ContentCard
+          v-if="isDm"
           title="Cast display"
           icon="i-lucide-tv"
           description="The TV link and controls live on the cast screen."

@@ -24,6 +24,11 @@ const activeQuests = computed(() =>
   quests.value.filter(q => (q.data.status ?? 'active') === 'active')
 )
 
+/** Players have no bestiary — don't offer them a row that always reads 0 */
+const countTypes = computed(() =>
+  ENTITY_TYPES.filter(type => isDm.value || type.value !== 'monster')
+)
+
 async function loadOverview() {
   if (!current.value) {
     loading.value = false
@@ -362,7 +367,7 @@ function sessionLabel(session: EntitySummary) {
         <!-- Compact reference counts -->
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
           <NuxtLink
-            v-for="type in ENTITY_TYPES"
+            v-for="type in countTypes"
             :key="type.value"
             :to="`/entities?type=${type.value}`"
             class="app-card group flex items-center gap-2.5 p-3 transition-colors hover:border-accented"

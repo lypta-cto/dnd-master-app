@@ -114,7 +114,12 @@ watch([type, () => current.value?.id], () => {
 <template>
   <AppPage
     :title="title"
-    :description="current ? `Everything in ${current.name}.` : 'Select a campaign first.'"
+    :description="!current
+      ? 'Select a campaign first.'
+      : isDm
+        ? `Everything in ${current.name}.`
+        : `Shared with you in ${current.name}.`"
+
     :breadcrumb="[
       { icon: 'i-lucide-house', to: '/' },
       { label: title }
@@ -161,7 +166,7 @@ watch([type, () => current.value?.id], () => {
       <EmptyState
         v-else-if="!pageData?.items.length"
         :icon="meta?.icon ?? 'i-lucide-box'"
-        :title="`No ${title.toLowerCase()} yet`"
+        :title="`No ${meta?.plural ?? 'entities'} yet`"
         :description="isDm
           ? 'Create the first one — anything you mention in [[brackets]] elsewhere will link to it.'
           : 'Nothing has been shared with you here yet.'"

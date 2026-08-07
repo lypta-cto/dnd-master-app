@@ -91,7 +91,19 @@ export function useAuthState() {
 export function useAuth() {
   const api = useApi()
   const mediaUrl = useMediaUrl()
+  const campaigns = useCampaigns()
   const { accessToken, user, ready, setSession, clearSession, refresh } = useAuthState()
+
+  /**
+   * Anything cached per-account has to go when the account changes.
+   *
+   * The campaign list carries `my_role`, so a stale one hands the next person
+   * on this tab the previous user's role — DM buttons on a player's screen —
+   * until a hard reload.
+   */
+  function resetAccountState() {
+    campaigns.reset()
+  }
 
   const isAuthenticated = computed(() => !!user.value && !!accessToken.value)
 
@@ -128,7 +140,13 @@ export function useAuth() {
   }
 
   async function login(credentials: { email: string, password: string }) {
+    const previousId = user.value?.id
     const response = await api.post<AuthResponse>('/auth/login', credentials)
+
+    if (previousId !== response.user.id) {
+      resetAccountState()
+    }
+
     setSession(response)
     ready.value = true
     return response.user
@@ -136,6 +154,7 @@ export function useAuth() {
 
   async function register(payload: { email: string, password: string, full_name?: string }) {
     const response = await api.post<AuthResponse>('/auth/register', payload)
+    resetAccountState()
     setSession(response)
     ready.value = true
     return response.user
@@ -147,6 +166,7 @@ export function useAuth() {
     } finally {
       // Clear locally even if the call failed — the user asked to be signed out
       clearSession()
+      resetAccountState()
       await navigateTo('/login')
     }
   }
