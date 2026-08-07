@@ -32,6 +32,14 @@ export interface EntityDetail extends EntitySummary {
   unresolved_links: string[]
 }
 
+export type EntitySort = 'name' | 'updated' | 'created'
+
+export const ENTITY_SORTS: { value: EntitySort, label: string, icon: string }[] = [
+  { value: 'name', label: 'Name', icon: 'i-lucide-arrow-down-a-z' },
+  { value: 'updated', label: 'Recently edited', icon: 'i-lucide-pencil' },
+  { value: 'created', label: 'Recently added', icon: 'i-lucide-sparkle' }
+]
+
 export interface EntityPage {
   items: EntitySummary[]
   total: number
@@ -84,7 +92,7 @@ export const ENTITY_TYPES: {
   plural: string
   icon: string
 }[] = [
-  { value: 'npc', label: 'NPC', plural: 'NPCs', icon: 'i-lucide-venetian-mask' },
+  { value: 'npc', label: 'NPC', plural: 'NPCs', icon: 'i-lucide-speech' },
   { value: 'character', label: 'Character', plural: 'Characters', icon: 'i-lucide-user-round' },
   { value: 'location', label: 'Location', plural: 'Locations', icon: 'i-lucide-castle' },
   { value: 'item', label: 'Item', plural: 'Items', icon: 'i-lucide-gem' },
@@ -98,6 +106,71 @@ export const ENTITY_TYPES: {
   { value: 'clue', label: 'Clue', plural: 'Clues', icon: 'i-lucide-search' },
   { value: 'session', label: 'Session', plural: 'Sessions', icon: 'i-lucide-calendar-days' }
 ]
+
+export type BadgeColor = 'primary' | 'success' | 'error' | 'warning' | 'neutral'
+
+const QUEST_COLORS: Record<string, BadgeColor> = {
+  active: 'primary', completed: 'success', failed: 'error', paused: 'neutral'
+}
+
+/**
+ * The one fact worth showing per type, straight from `data`.
+ *
+ * Lives here rather than in the card because the compact list shows the same
+ * badge, and two copies would drift the first time a type gains a field.
+ */
+export function entityBadge(entity: EntitySummary): { label: string, color: BadgeColor } | null {
+  const d = entity.data
+
+  switch (entity.type) {
+    case 'quest': {
+      const status = String(d.status ?? 'active')
+      return { label: status, color: QUEST_COLORS[status] ?? 'primary' }
+    }
+    case 'session': {
+      const played = d.status === 'played'
+      const when = d.date ? ` · ${d.date}` : ''
+      return { label: `${played ? 'played' : 'planned'}${when}`, color: played ? 'success' : 'warning' }
+    }
+    case 'monster':
+      return d.cr ? { label: `CR ${d.cr}`, color: 'error' } : null
+    case 'npc': {
+      const status = String(d.status ?? '')
+      if (!status || status === 'alive') {
+        return null
+      }
+      return { label: status, color: status === 'dead' ? 'error' : 'warning' }
+    }
+    case 'scene': {
+      const status = String(d.status ?? 'planned')
+      const bits = [d.kind, status].filter(Boolean).join(' · ')
+      return { label: bits, color: status === 'played' ? 'success' : status === 'skipped' ? 'neutral' : 'warning' }
+    }
+    case 'encounter': {
+      const difficulty = String(d.difficulty ?? '')
+      const bits = [d.kind, difficulty].filter(Boolean).join(' · ')
+      return bits
+        ? { label: bits, color: difficulty === 'deadly' || difficulty === 'hard' ? 'error' : 'neutral' }
+        : null
+    }
+    case 'clue': {
+      const weight = String(d.weight ?? '')
+      return weight ? { label: weight, color: weight === 'essential' ? 'primary' : 'neutral' } : null
+    }
+    case 'character': {
+      const bits = [d.level ? `Lv ${d.level}` : null, d.class].filter(Boolean)
+      return bits.length ? { label: bits.join(' · '), color: 'neutral' } : null
+    }
+    default:
+      return null
+  }
+}
+
+/** Where the crop centres — set by the DM from the gallery's Crop focus */
+export function coverFocusStyle(entity: EntitySummary) {
+  const f = entity.data.cover_focus as { x: number, y: number } | undefined
+  return f && typeof f.x === 'number' ? { objectPosition: `${f.x}% ${f.y}%` } : undefined
+}
 
 export function entityTypeMeta(type: EntityType) {
   return ENTITY_TYPES.find(t => t.value === type) ?? ENTITY_TYPES[ENTITY_TYPES.length - 1]!
@@ -208,8 +281,21 @@ export function useEntities() {
     return `/campaigns/${currentId.value}`
   }
 
-  const list = (params: { type?: EntityType, tag?: string, page?: number, page_size?: number } = {}) =>
-    api.get<EntityPage>(`${base()}/entities`, { query: { ...params } })
+  /**
+   * One page of a filtered list.
+   *
+   * `q` and `sort` are the server's job, not the client's: a campaign runs to
+   * hundreds of entries, and filtering the twenty-four you can already see
+   * would find nothing and look broken.
+   */
+  const list = (params: {
+    type?: EntityType
+    tag?: string
+    q?: string
+    sort?: EntitySort
+    page?: number
+    page_size?: number
+  } = {}) => api.get<EntityPage>(`${base()}/entities`, { query: { ...params } })
 
   const read = (id: string) => api.get<EntityDetail>(`${base()}/entities/${id}`)
 

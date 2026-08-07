@@ -14,32 +14,114 @@ const page = ref(1)
 const pageData = ref<EntityPage | null>(null)
 const loading = ref(true)
 
+/* --- Finding one thing in two hundred ---------------------------------------
+ * Past about a screenful you stop browsing a list and start hunting a name, so
+ * search and sort run on the server over the whole list — filtering the page
+ * you can already see would find nothing and look broken — and the layout
+ * switches to compact rows when cards stop paying for their height.
+ */
+const router = useRouter()
+
+const search = ref(String(route.query.q ?? ''))
+/** What's actually been sent: `search` runs ahead of it while you type */
+const applied = ref(search.value.trim())
+
+const sort = ref<EntitySort>(
+  ENTITY_SORTS.some(s => s.value === route.query.sort)
+    ? (route.query.sort as EntitySort)
+    : 'name'
+)
+
+// Remembered across types and sessions: it's a preference about eyesight and
+// screen size, not about the list you happen to be looking at
+const layout = useCookie<'grid' | 'list'>('entity-layout', {
+  default: () => 'grid',
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 365
+})
+
+const sortMeta = computed(() => ENTITY_SORTS.find(s => s.value === sort.value)!)
+const sortMenu = computed(() =>
+  ENTITY_SORTS.map(option => ({
+    label: option.label,
+    icon: option.icon,
+    onSelect: () => {
+      sort.value = option.value
+    }
+  }))
+)
+
+let debounce: ReturnType<typeof setTimeout> | undefined
+
+watch(search, (value) => {
+  clearTimeout(debounce)
+  debounce = setTimeout(() => {
+    applied.value = value.trim()
+  }, 250)
+})
+
+onBeforeUnmount(() => clearTimeout(debounce))
+
+/**
+ * The filter belongs in the URL so that opening an NPC and coming back doesn't
+ * drop you at the top of two hundred unfiltered names.
+ */
+function rememberInUrl() {
+  router.replace({
+    query: {
+      ...(type.value ? { type: type.value } : {}),
+      ...(applied.value ? { q: applied.value } : {}),
+      ...(sort.value === 'name' ? {} : { sort: sort.value })
+    }
+  })
+}
+
+// Search-as-you-type means several requests can be in flight; only the newest
+// one is allowed to write, or a slow early response overwrites a later list.
+let latest = 0
+
 async function load() {
   if (!current.value) {
     loading.value = false
     return
   }
 
+  const request = ++latest
   loading.value = true
 
   try {
-    pageData.value = await entities.list({
+    const result = await entities.list({
       type: type.value,
+      q: applied.value || undefined,
+      sort: sort.value,
       page: page.value,
-      page_size: 24
+      // Rows are a third the height of cards, so a page of them is worth more
+      page_size: layout.value === 'list' ? 50 : 24
     })
+
+    if (request === latest) {
+      pageData.value = result
+    }
   } finally {
-    loading.value = false
+    if (request === latest) {
+      loading.value = false
+    }
   }
 }
 
-// Type switch resets pagination; campaign switch reloads everything
+// A search typed for NPCs means nothing among Locations
 watch([type, () => current.value?.id], () => {
-  page.value = 1
-  load()
-}, { immediate: true })
+  search.value = ''
+  applied.value = ''
+})
 
-watch(page, load)
+// Anything that changes what the list contains sends you back to its first page
+watch([type, () => current.value?.id, applied, sort], () => {
+  page.value = 1
+  rememberInUrl()
+})
+
+watch([type, () => current.value?.id, applied, sort, page, layout], load, { immediate: true })
 
 const title = computed(() => meta.value?.plural ?? 'All entities')
 
@@ -150,6 +232,7 @@ watch([type, () => current.value?.id], () => {
 <template>
   <AppPage
     :title="title"
+    :page-key="`entities-${type ?? 'all'}`"
     :description="!current
       ? 'Select a campaign first.'
       : isDm
@@ -188,6 +271,62 @@ watch([type, () => current.value?.id], () => {
     />
 
     <template v-else>
+      <!-- Only worth the row once there's enough to hunt through -->
+      <div
+        v-if="pageData && (pageData.total > 8 || applied)"
+        class="flex flex-wrap items-center gap-2"
+      >
+        <UInput
+          v-model="search"
+          icon="i-lucide-search"
+          :placeholder="`Search ${meta?.plural ?? 'entities'}…`"
+          class="w-full sm:w-72"
+          :ui="{ base: 'rounded-xl' }"
+        >
+          <template
+            v-if="search"
+            #trailing
+          >
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="link"
+              size="xs"
+              aria-label="Clear search"
+              @click="search = ''"
+            />
+          </template>
+        </UInput>
+
+        <UDropdownMenu :items="sortMenu">
+          <UButton
+            :label="sortMeta.label"
+            :icon="sortMeta.icon"
+            trailing-icon="i-lucide-chevron-down"
+            color="neutral"
+            variant="outline"
+            class="rounded-xl"
+          />
+        </UDropdownMenu>
+
+        <div class="ml-auto flex items-center gap-2">
+          <p
+            v-if="applied"
+            class="text-sm tabular-nums text-muted"
+          >
+            {{ pageData.total }} {{ pageData.total === 1 ? 'match' : 'matches' }}
+          </p>
+          <UButton
+            :icon="layout === 'grid' ? 'i-lucide-list' : 'i-lucide-layout-grid'"
+            :aria-label="layout === 'grid' ? 'Switch to list' : 'Switch to cards'"
+            color="neutral"
+            variant="outline"
+            class="rounded-xl"
+            @click="layout = layout === 'grid' ? 'list' : 'grid'"
+          />
+        </div>
+      </div>
+
       <div
         v-if="loading"
         class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
@@ -198,6 +337,22 @@ watch([type, () => current.value?.id], () => {
           class="h-24 rounded-2xl"
         />
       </div>
+
+      <EmptyState
+        v-else-if="applied && !pageData?.items.length"
+        icon="i-lucide-search-x"
+        :title="`Nothing matches “${applied}”`"
+        description="Search covers names and summaries across the whole list."
+      >
+        <UButton
+          label="Clear search"
+          icon="i-lucide-x"
+          color="neutral"
+          variant="outline"
+          class="rounded-xl"
+          @click="search = ''"
+        />
+      </EmptyState>
 
       <EmptyState
         v-else-if="!pageData?.items.length"
@@ -247,8 +402,26 @@ watch([type, () => current.value?.id], () => {
           </ul>
         </ContentCard>
 
-        <div class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <div
+          v-if="layout === 'grid'"
+          class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+        >
           <EntityCard
+            v-for="entity in pageData.items"
+            :key="entity.id"
+            :entity="entity"
+            :no-visibility="!isDm"
+            :selectable="selecting"
+            :selected="selected.includes(entity.id)"
+            @toggle="toggle"
+          />
+        </div>
+
+        <div
+          v-else
+          class="app-card overflow-hidden p-0"
+        >
+          <EntityRow
             v-for="entity in pageData.items"
             :key="entity.id"
             :entity="entity"

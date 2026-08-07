@@ -7,9 +7,21 @@ const props = withDefaults(defineProps<{
   breadcrumb?: BreadcrumbItem[]
   /** Show a back arrow before the breadcrumb */
   back?: boolean
+  /**
+   * What counts as "a different page" for the entrance animation.
+   *
+   * Defaults to the path. It used to be the full path, which meant any query
+   * change replayed the animation — and since the body is rebuilt to do that,
+   * a filter typed into a page-level search box lost its own focus every time
+   * it applied. Pass this when one path really is several pages.
+   */
+  pageKey?: string
 }>(), {
   back: false
 })
+
+const route = useRoute()
+const animationKey = computed(() => props.pageKey ?? route.path)
 
 defineSlots<{
   /** Buttons rendered next to the page title */
@@ -81,7 +93,7 @@ useHead({ title: props.title })
 
     <template #body>
       <div
-        :key="$route.fullPath"
+        :key="animationKey"
         class="app-page-in flex flex-col gap-6"
       >
         <div class="flex flex-wrap items-start justify-between gap-3">

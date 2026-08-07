@@ -24,62 +24,8 @@ function onClick(event: MouseEvent) {
 
 const mediaUrl = useMediaUrl()
 const meta = computed(() => entityTypeMeta(props.entity.type))
-
-/** Where the crop centres — set by the DM from the gallery's Crop focus */
-const focusStyle = computed(() => {
-  const f = props.entity.data.cover_focus as { x: number, y: number } | undefined
-  return f && typeof f.x === 'number' ? { objectPosition: `${f.x}% ${f.y}%` } : undefined
-})
-
-const QUEST_COLORS: Record<string, 'primary' | 'success' | 'error' | 'neutral'> = {
-  active: 'primary', completed: 'success', failed: 'error', paused: 'neutral'
-}
-
-/** The one fact worth showing per type, straight from `data`. */
-const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'error' | 'warning' | 'neutral' } | null>(() => {
-  const d = props.entity.data
-
-  switch (props.entity.type) {
-    case 'quest': {
-      const status = String(d.status ?? 'active')
-      return { label: status, color: QUEST_COLORS[status] ?? 'primary' }
-    }
-    case 'session': {
-      const played = d.status === 'played'
-      const when = d.date ? ` · ${d.date}` : ''
-      return { label: `${played ? 'played' : 'planned'}${when}`, color: played ? 'success' : 'warning' }
-    }
-    case 'monster':
-      return d.cr ? { label: `CR ${d.cr}`, color: 'error' } : null
-    case 'npc': {
-      const status = String(d.status ?? '')
-      if (!status || status === 'alive') return null
-      return { label: status, color: status === 'dead' ? 'error' : 'warning' }
-    }
-    case 'scene': {
-      const status = String(d.status ?? 'planned')
-      const bits = [d.kind, status].filter(Boolean).join(' · ')
-      return { label: bits, color: status === 'played' ? 'success' : status === 'skipped' ? 'neutral' : 'warning' }
-    }
-    case 'encounter': {
-      const difficulty = String(d.difficulty ?? '')
-      const bits = [d.kind, difficulty].filter(Boolean).join(' · ')
-      return bits
-        ? { label: bits, color: difficulty === 'deadly' || difficulty === 'hard' ? 'error' : 'neutral' }
-        : null
-    }
-    case 'clue': {
-      const weight = String(d.weight ?? '')
-      return weight ? { label: weight, color: weight === 'essential' ? 'primary' : 'neutral' } : null
-    }
-    case 'character': {
-      const bits = [d.level ? `Lv ${d.level}` : null, d.class].filter(Boolean)
-      return bits.length ? { label: bits.join(' · '), color: 'neutral' } : null
-    }
-    default:
-      return null
-  }
-})
+const focusStyle = computed(() => coverFocusStyle(props.entity))
+const dataBadge = computed(() => entityBadge(props.entity))
 </script>
 
 <template>
