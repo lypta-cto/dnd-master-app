@@ -113,7 +113,8 @@ export interface TypeField {
 export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   character: [
     { key: 'class', label: 'Class & subclass', placeholder: 'Paladin (Devotion)' },
-    { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…' }
+    { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…' },
+    { key: 'passive_perception', label: 'Passive perception', placeholder: '13' }
   ],
   npc: [
     { key: 'race', label: 'Race', placeholder: 'Human, elf, vampire…' },

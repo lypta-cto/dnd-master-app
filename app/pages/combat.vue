@@ -237,10 +237,30 @@ async function bumpHp(combatant: Combatant, delta: number) {
   }
 }
 
-function toggleCondition(combatant: Combatant, name: string) {
+async function toggleCondition(combatant: Combatant, name: string) {
   combatant.conditions = combatant.conditions.includes(name)
     ? combatant.conditions.filter(c => c !== name)
     : [...combatant.conditions, name]
+  queueSave()
+
+  // Conditions on characters mirror to the sheet, like HP does — the party
+  // page and the player's own view should agree with the fight
+  if (combatant.kind === 'character' && combatant.entity_id) {
+    const sheet = characters.value.find(c => c.id === combatant.entity_id)
+    if (sheet) {
+      sheet.data = { ...sheet.data, conditions: [...combatant.conditions] }
+      await entities.update(combatant.entity_id, { data: sheet.data })
+    }
+  }
+}
+
+/** d20 for everyone still sitting on 0 — the DM rolls monsters in one click. */
+function rollMissingInitiative() {
+  for (const combatant of state.value.combatants) {
+    if (combatant.initiative === 0) {
+      combatant.initiative = 1 + Math.floor(Math.random() * 20)
+    }
+  }
   queueSave()
 }
 
@@ -316,24 +336,32 @@ function hpPercent(combatant: Combatant) {
         :description="state.active ? undefined : 'Add combatants, enter initiative rolls, then start.'"
         flush
       >
-        <template
-          v-if="state.active"
-          #actions
-        >
+        <template #actions>
           <UButton
-            icon="i-lucide-skip-back"
+            v-if="state.combatants.some(c => c.initiative === 0)"
+            label="Roll the rest"
+            icon="i-lucide-dices"
             color="neutral"
             variant="outline"
             size="sm"
-            aria-label="Previous turn"
-            @click="previousTurn"
+            @click="rollMissingInitiative"
           />
-          <UButton
-            label="Next turn"
-            trailing-icon="i-lucide-skip-forward"
-            size="sm"
-            @click="nextTurn"
-          />
+          <template v-if="state.active">
+            <UButton
+              icon="i-lucide-skip-back"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              aria-label="Previous turn"
+              @click="previousTurn"
+            />
+            <UButton
+              label="Next turn"
+              trailing-icon="i-lucide-skip-forward"
+              size="sm"
+              @click="nextTurn"
+            />
+          </template>
         </template>
 
         <p
@@ -498,6 +526,13 @@ function hpPercent(combatant: Combatant) {
               class="font-medium text-primary"
             >create one</NuxtLink>.
           </p>
+        </ContentCard>
+
+        <ContentCard
+          title="Dice"
+          icon="i-lucide-dices"
+        >
+          <DiceRoller />
         </ContentCard>
 
         <ContentCard

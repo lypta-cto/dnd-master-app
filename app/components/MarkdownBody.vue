@@ -3,6 +3,12 @@ const props = defineProps<{
   body: string | null | undefined
   /** Entities the API resolved from this body's [[links]] */
   linked?: { name: string, slug: string, id: string }[]
+  /** Make - [ ] task items clickable; emits which one was toggled */
+  editable?: boolean
+}>()
+
+const emit = defineEmits<{
+  toggleTask: [index: number]
 }>()
 
 const { render } = useMarkdown()
@@ -16,6 +22,23 @@ function onClick(event: MouseEvent) {
   if (anchor) {
     event.preventDefault()
     router.push(anchor.getAttribute('href')!)
+    return
+  }
+
+  // Disabled checkboxes swallow clicks, so the whole list item is the target —
+  // a bigger tap area at the table anyway. Index = position among all tasks.
+  if (!props.editable) {
+    return
+  }
+  const item = (event.target as HTMLElement).closest('li')
+  const root = event.currentTarget as HTMLElement
+  if (!item || !item.querySelector(':scope > input[type=checkbox]')) {
+    return
+  }
+  const tasks = [...root.querySelectorAll('li > input[type=checkbox]')]
+  const index = tasks.indexOf(item.querySelector(':scope > input[type=checkbox]')!)
+  if (index !== -1) {
+    emit('toggleTask', index)
   }
 }
 </script>
@@ -24,6 +47,7 @@ function onClick(event: MouseEvent) {
   <!-- eslint-disable vue/no-v-html -- html is the output of DOMPurify.sanitize -->
   <div
     class="markdown-body"
+    :class="editable && 'markdown-body--editable'"
     @click="onClick"
     v-html="html"
   />
@@ -55,6 +79,26 @@ function onClick(event: MouseEvent) {
   margin: 0.6em 0;
   padding-left: 1.4em;
   list-style: revert;
+}
+
+.markdown-body :deep(li:has(> input[type='checkbox'])) {
+  list-style: none;
+  margin-left: -1.4em;
+  padding: 0.1em 0;
+}
+
+.markdown-body.markdown-body--editable :deep(li:has(> input[type='checkbox'])) {
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.markdown-body.markdown-body--editable :deep(li:has(> input[type='checkbox']):hover) {
+  background: var(--ui-bg-elevated);
+}
+
+.markdown-body :deep(li > input[type='checkbox']) {
+  margin-right: 0.5em;
+  accent-color: var(--ui-primary);
 }
 
 .markdown-body :deep(blockquote) {

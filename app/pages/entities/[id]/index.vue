@@ -131,6 +131,26 @@ async function toggleSessionStatus() {
   }
 }
 
+/** Flip the nth - [ ] / - [x] marker in the body and save. */
+async function toggleTask(index: number) {
+  if (!entity.value?.body || !canWrite.value) {
+    return
+  }
+
+  let seen = -1
+  const next = entity.value.body.replace(/(-\s\[)([ xX])(\])/g, (whole, open, mark, close) => {
+    seen += 1
+    if (seen !== index) {
+      return whole
+    }
+    return `${open}${mark === ' ' ? 'x' : ' '}${close}`
+  })
+
+  if (next !== entity.value.body) {
+    entity.value = await entities.update(entity.value.id, { body: next })
+  }
+}
+
 const RELATION_LABELS: Record<LinkRelation, string> = {
   mentions: 'Mentions',
   member_of: 'Member of',
@@ -305,6 +325,8 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           <MarkdownBody
             :body="entity.body"
             :linked="entity.links"
+            :editable="canWrite"
+            @toggle-task="toggleTask"
           />
         </ContentCard>
 

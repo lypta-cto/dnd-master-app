@@ -87,6 +87,21 @@ function conditions(character: EntitySummary): string[] {
   return Array.isArray(character.data.conditions) ? character.data.conditions as string[] : []
 }
 
+function slotSummary(character: EntitySummary): string | null {
+  const slots = character.data.slots as Record<string, { total: number, used: number }> | undefined
+  if (!slots) return null
+  const parts = Object.entries(slots)
+    .filter(([, row]) => row.total > 0)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([level, row]) => `L${level} ${row.total - row.used}/${row.total}`)
+  return parts.length ? parts.join(' · ') : null
+}
+
+function deathSaves(character: EntitySummary) {
+  const raw = character.data.death_saves as { s?: number, f?: number } | undefined
+  return { s: raw?.s ?? 0, f: raw?.f ?? 0 }
+}
+
 function subtitle(character: EntitySummary) {
   const parts = [character.data.class, character.data.ancestry].filter(Boolean)
   const level = character.data.level ? `Lv ${character.data.level}` : null
@@ -158,6 +173,13 @@ function subtitle(character: EntitySummary) {
             variant="subtle"
             size="sm"
           />
+          <UBadge
+            v-if="character.data.passive_perception"
+            :label="`PP ${character.data.passive_perception}`"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          />
         </template>
 
         <div class="space-y-3">
@@ -211,6 +233,39 @@ function subtitle(character: EntitySummary) {
                 class="ml-auto size-3.5 animate-spin text-muted"
               />
             </div>
+          </div>
+
+          <!-- Spell slots left -->
+          <p
+            v-if="slotSummary(character)"
+            class="text-xs tabular-nums text-muted"
+          >
+            Slots: {{ slotSummary(character) }}
+          </p>
+
+          <!-- Death saves, only when it matters -->
+          <div
+            v-if="hp(character).current === 0"
+            class="flex items-center gap-3 text-xs"
+          >
+            <span class="flex items-center gap-1">
+              <span class="text-muted">Saves</span>
+              <span
+                v-for="i in 3"
+                :key="`s${i}`"
+                class="size-2.5 rounded-full border"
+                :class="i <= deathSaves(character).s ? 'border-emerald-500 bg-emerald-500' : 'border-accented'"
+              />
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="text-muted">Fails</span>
+              <span
+                v-for="i in 3"
+                :key="`f${i}`"
+                class="size-2.5 rounded-full border"
+                :class="i <= deathSaves(character).f ? 'border-red-500 bg-red-500' : 'border-accented'"
+              />
+            </span>
           </div>
 
           <!-- Conditions -->

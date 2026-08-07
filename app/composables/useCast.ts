@@ -1,4 +1,4 @@
-export type CastMode = 'idle' | 'image' | 'slideshow' | 'text' | 'initiative' | 'map'
+export type CastMode = 'idle' | 'image' | 'slideshow' | 'text' | 'initiative' | 'map' | 'dice'
 
 export interface CastState {
   mode: CastMode

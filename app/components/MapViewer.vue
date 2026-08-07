@@ -21,6 +21,7 @@ const pins = ref<MapPin[]>(
 )
 
 const placing = ref(false)
+const movingId = ref<string | null>(null)
 const saving = ref(false)
 
 /* --- Pin form (opens after a click on the map) ----------------------------- */
@@ -50,13 +51,28 @@ watch(() => form.query, (q) => {
 })
 
 function onMapClick(event: MouseEvent) {
-  if (!placing.value || !props.canEdit) {
+  if ((!placing.value && !movingId.value) || !props.canEdit) {
     return
   }
   const target = event.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
-  form.x = Math.round(((event.clientX - rect.left) / rect.width) * 1000) / 10
-  form.y = Math.round(((event.clientY - rect.top) / rect.height) * 1000) / 10
+  const x = Math.round(((event.clientX - rect.left) / rect.width) * 1000) / 10
+  const y = Math.round(((event.clientY - rect.top) / rect.height) * 1000) / 10
+
+  // Second click of a move: drop the pin at its new spot, done
+  if (movingId.value) {
+    const pin = pins.value.find(p => p.id === movingId.value)
+    if (pin) {
+      pin.x = x
+      pin.y = y
+      persist()
+    }
+    movingId.value = null
+    return
+  }
+
+  form.x = x
+  form.y = y
   form.label = ''
   form.query = ''
   form.results = []
@@ -162,6 +178,15 @@ async function castMap() {
     <template #actions>
       <template v-if="canEdit">
         <UButton
+          v-if="movingId"
+          label="Click the new spot…"
+          icon="i-lucide-move"
+          color="primary"
+          size="sm"
+          @click="movingId = null"
+        />
+        <UButton
+          v-else
           :label="placing ? 'Click the map…' : 'Place pin'"
           :icon="placing ? 'i-lucide-crosshair' : 'i-lucide-map-pin-plus'"
           :color="placing ? 'primary' : 'neutral'"
@@ -190,7 +215,7 @@ async function castMap() {
     <div
       v-else
       class="relative select-none"
-      :class="placing && 'cursor-crosshair'"
+      :class="(placing || movingId) && 'cursor-crosshair'"
       @click="onMapClick"
     >
       <img
@@ -215,7 +240,11 @@ async function castMap() {
           <UIcon
             name="i-lucide-map-pin"
             class="size-7 text-primary drop-shadow-[0_2px_3px_rgb(0_0_0/60%)] transition-transform group-hover:scale-125"
+            :class="movingId === pin.id && 'animate-pulse'"
           />
+          <span class="absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap rounded-full bg-black/65 px-2 py-0.5 text-xs font-medium text-white">
+            {{ pin.label }}
+          </span>
         </button>
 
         <template #content>
@@ -232,6 +261,15 @@ async function castMap() {
               class="text-sm font-medium text-highlighted"
             >{{ pin.label }}</span>
 
+            <UButton
+              v-if="canEdit"
+              icon="i-lucide-move"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              aria-label="Move pin"
+              @click="movingId = pin.id"
+            />
             <UButton
               v-if="canEdit"
               icon="i-lucide-trash-2"

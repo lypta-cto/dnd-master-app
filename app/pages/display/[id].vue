@@ -52,6 +52,48 @@ watch(state, () => {
 
 onUnmounted(() => clearInterval(slideTimer))
 
+/*
+ * Dice drama: on every cast (nonce changes even for identical rolls) the big
+ * number shuffles for a moment before settling. Pure theatre, zero rules.
+ */
+const shownTotal = ref<number | null>(null)
+const settling = ref(false)
+let diceTimer: ReturnType<typeof setInterval> | undefined
+let diceStop: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => [state.value.mode, state.value.payload.nonce],
+  () => {
+    clearInterval(diceTimer)
+    clearTimeout(diceStop)
+
+    if (state.value.mode !== 'dice') {
+      shownTotal.value = null
+      return
+    }
+
+    const total = Number(state.value.payload.total ?? 0)
+    const sides = Number(state.value.payload.sides ?? 20)
+    settling.value = false
+
+    diceTimer = setInterval(() => {
+      shownTotal.value = 1 + Math.floor(Math.random() * Math.max(sides, total, 2))
+    }, 60)
+
+    diceStop = setTimeout(() => {
+      clearInterval(diceTimer)
+      shownTotal.value = total
+      settling.value = true
+    }, 1100)
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  clearInterval(diceTimer)
+  clearTimeout(diceStop)
+})
+
 useHead({ title: 'Display' })
 </script>
 
@@ -122,6 +164,36 @@ useHead({ title: 'Display' })
           :class="index === slideIndex % slides.length && 'display-dot-item--active'"
         />
       </div>
+    </div>
+
+    <!-- Dice cast -->
+    <div
+      v-else-if="state.mode === 'dice'"
+      class="display-center"
+    >
+      <p
+        v-if="state.payload.label"
+        class="display-dice-label"
+      >
+        {{ state.payload.label }}
+      </p>
+      <p
+        class="display-dice-total"
+        :class="settling && 'display-dice-total--settled'"
+      >
+        {{ shownTotal ?? state.payload.total }}
+      </p>
+      <p
+        v-if="settling"
+        class="display-dice-breakdown"
+      >
+        {{ state.payload.formula }}
+        <template v-if="(state.payload.rolls as number[] ?? []).length > 1">
+          · {{ (state.payload.rolls as number[]).join(' + ') }}<template v-if="state.payload.modifier">
+            {{ Number(state.payload.modifier) > 0 ? ' + ' : ' − ' }}{{ Math.abs(Number(state.payload.modifier)) }}
+          </template>
+        </template>
+      </p>
     </div>
 
     <!-- Map cast -->
@@ -283,6 +355,39 @@ useHead({ title: 'Display' })
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 999px;
+}
+
+.display-dice-label {
+  font-size: 1.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 1rem;
+}
+
+.display-dice-total {
+  font-size: clamp(8rem, 30vw, 20rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  transform: scale(0.96);
+  transition: opacity 200ms ease, transform 200ms ease, color 200ms ease;
+}
+
+.display-dice-total--settled {
+  opacity: 1;
+  transform: scale(1);
+  color: rgb(255 200 120);
+  text-shadow: 0 0 80px rgb(255 140 60 / 35%);
+}
+
+.display-dice-breakdown {
+  margin-top: 1.5rem;
+  font-size: 1.4rem;
+  font-family: ui-monospace, monospace;
+  opacity: 0.55;
+  animation: display-fade 400ms ease;
 }
 
 .display-map-wrap {

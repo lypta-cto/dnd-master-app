@@ -226,6 +226,14 @@ async function rotate() {
         <SlideshowBuilder @cast="s => (status = s)" />
 
         <ContentCard
+          title="Dice"
+          icon="i-lucide-dices"
+          description="Roll in private, or cast the result to the table for the drama."
+        >
+          <DiceRoller />
+        </ContentCard>
+
+        <ContentCard
           title="Cast an entity"
           icon="i-lucide-venetian-mask"
           description="Open any NPC or location and press Cast — its portrait lands here."

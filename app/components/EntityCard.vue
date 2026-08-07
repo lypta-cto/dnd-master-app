@@ -7,6 +7,40 @@ const props = defineProps<{
 
 const mediaUrl = useMediaUrl()
 const meta = computed(() => entityTypeMeta(props.entity.type))
+
+const QUEST_COLORS: Record<string, 'primary' | 'success' | 'error' | 'neutral'> = {
+  active: 'primary', completed: 'success', failed: 'error', paused: 'neutral'
+}
+
+/** The one fact worth showing per type, straight from `data`. */
+const dataBadge = computed<{ label: string, color: 'primary' | 'success' | 'error' | 'warning' | 'neutral' } | null>(() => {
+  const d = props.entity.data
+
+  switch (props.entity.type) {
+    case 'quest': {
+      const status = String(d.status ?? 'active')
+      return { label: status, color: QUEST_COLORS[status] ?? 'primary' }
+    }
+    case 'session': {
+      const played = d.status === 'played'
+      const when = d.date ? ` · ${d.date}` : ''
+      return { label: `${played ? 'played' : 'planned'}${when}`, color: played ? 'success' : 'warning' }
+    }
+    case 'monster':
+      return d.cr ? { label: `CR ${d.cr}`, color: 'error' } : null
+    case 'npc': {
+      const status = String(d.status ?? '')
+      if (!status || status === 'alive') return null
+      return { label: status, color: status === 'dead' ? 'error' : 'warning' }
+    }
+    case 'character': {
+      const bits = [d.level ? `Lv ${d.level}` : null, d.class].filter(Boolean)
+      return bits.length ? { label: bits.join(' · '), color: 'neutral' } : null
+    }
+    default:
+      return null
+  }
+})
 </script>
 
 <template>
@@ -44,6 +78,15 @@ const meta = computed(() => entityTypeMeta(props.entity.type))
       <p class="mt-0.5 line-clamp-2 text-sm text-muted">
         {{ entity.summary || meta.label }}
       </p>
+
+      <UBadge
+        v-if="dataBadge"
+        :label="dataBadge.label"
+        :color="dataBadge.color"
+        variant="subtle"
+        size="sm"
+        class="mt-1.5 capitalize"
+      />
 
       <div
         v-if="entity.tags.length"

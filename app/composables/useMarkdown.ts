@@ -35,7 +35,8 @@ export function useMarkdown() {
     const html = marked.parse(withLinks, { async: false, gfm: true, breaks: true })
 
     return DOMPurify.sanitize(html, {
-      ALLOWED_ATTR: ['href', 'class', 'data-entity', 'title', 'src', 'alt']
+      // type/checked/disabled keep GFM task checkboxes rendering as checkboxes
+      ALLOWED_ATTR: ['href', 'class', 'data-entity', 'title', 'src', 'alt', 'type', 'checked', 'disabled']
     })
   }
 

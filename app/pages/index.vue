@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const { current, isDm, campaigns } = useCampaigns()
+const { user } = useAuth()
 const entities = useEntities()
 
 const creating = ref(false)
@@ -41,7 +42,10 @@ async function loadOverview() {
 
     sessions.value = sessionPage.items
     quests.value = questPage.items
-    characters.value = characterPage.items
+    // Your own character reads first — for a player it's the point of the page
+    characters.value = [...characterPage.items].sort((a, b) =>
+      Number(b.owner_id === user.value?.id) - Number(a.owner_id === user.value?.id)
+    )
     counts.value = Object.fromEntries(
       ENTITY_TYPES.map((t, index) => [t.value, perType[index]!.total])
     )
@@ -222,8 +226,17 @@ function sessionLabel(session: EntitySummary) {
                     :to="`/entities/${member.id}`"
                     class="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
                   >
-                    <span class="truncate text-sm font-medium text-highlighted">
-                      {{ member.name }}
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      <span class="truncate text-sm font-medium text-highlighted">
+                        {{ member.name }}
+                      </span>
+                      <UBadge
+                        v-if="member.owner_id === user?.id"
+                        label="yours"
+                        color="primary"
+                        variant="subtle"
+                        size="sm"
+                      />
                     </span>
                     <span class="shrink-0 text-xs tabular-nums text-muted">
                       {{ member.data.current_hp ?? '–' }}/{{ member.data.max_hp ?? '–' }} HP

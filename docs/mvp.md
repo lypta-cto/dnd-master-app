@@ -75,8 +75,9 @@ Ono što kampanju čini stvarnom, ne demo-om.
   sceni/lokaciji. Embed + URL polje; bez hostovanja fajlova.
 - **E2. Handouts** — entitet/slika označen kao handout, igrači ga vide u svom pogledu
   kad ga "predaš" (visibility flip + notifikacija).
-- **E3. Kockice na displeju** *(razmotriti)* — DM baci d20 i rezultat se pokaže na
-  castu radi drame. Malo koda, veliki efekat za stolom.
+- **E3. Kockice na displeju** ✓ — DiceRoller (NdM±K, brzi tasteri) na cast i combat
+  stranici; Roll u tajnosti ili Roll & cast — displej mesa brojeve pa se skrasi na
+  užarenom totalu sa raspisom. Combat uz to ima "Roll the rest" za praznu inicijativu.
 
 ### Namerno van plana (za sada)
 
