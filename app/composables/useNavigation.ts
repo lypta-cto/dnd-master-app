@@ -21,6 +21,7 @@ export function useNavigation() {
       { label: 'Campaign', icon: 'i-lucide-swords', to: '/campaign' },
       ...(isDm.value
         ? [
+            { label: 'Run', icon: 'i-lucide-play', to: '/run' },
             { label: 'Combat', icon: 'i-lucide-swords', to: '/combat' },
             { label: 'Cast screen', icon: 'i-lucide-cast', to: '/cast' }
           ]

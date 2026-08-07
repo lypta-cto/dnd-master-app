@@ -222,7 +222,27 @@ Tri nova tipa, svaki košta jedan enum — to je i bila poenta jedne tabele.
 Usput: vrednosti strukturiranih polja se više ne kapitalizuju po reči osim kod
 polja sa fiksnim opcijama — rečenice su izgledale Kao Naslov Knjige.
 
-Sledeće po dogovoru: run mode.
+## Korak 5: run mode ✓
+
+`/run` — jedan ekran za vođenje večeri. Sve ostalo u aplikaciji je priprema; ovde
+je pitanje samo „šta se dešava sad".
+
+- **Scena na stolu**: svrha, „šta treba da odu znajući", telo, i **izlazi kao
+  dugmad** — klik prebacuje veče u sledeću scenu (isti `leads_to` linkovi).
+- **Tragovi**: čekiraš ih u trenutku kad ih družina stvarno dobije, a upozorenje
+  javlja kad esencijalni zaključak još nema nijedan otkriven trag.
+- **Spotlight**: brojač po igraču i rečenica „Bojan, Goran, Milica and Vera
+  haven't had a moment yet" — pravi režim otkazivanja stola od osmoro.
+- **Sat**: događaji koji se dešavaju bez obzira gde je družina; u zaglavlju stoji
+  šta je sledeće.
+- **Borba**: kompaktan prikaz runde i ko je na potezu, sa linkom na tracker.
+- **Beleške za večeras**, koje se brišu na kraju sesije.
+
+Stanje je `run_states` tabela (jedan red po kampanji, kao borba i cast), a
+`scene_id` i `session_id` su namerno obične kolone bez FK — usred sesije je
+najgori mogući trenutak da kaskada odnese ekran DM-u.
+
+Time je zaokruženo sve što smo planirali pre Neona.
 
 ### Namerno van plana (za sada)
 
