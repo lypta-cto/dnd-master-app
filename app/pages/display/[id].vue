@@ -124,6 +124,39 @@ useHead({ title: 'Display' })
       </div>
     </div>
 
+    <!-- Map cast -->
+    <div
+      v-else-if="state.mode === 'map'"
+      class="display-image"
+    >
+      <div class="display-map-wrap">
+        <!-- Pins are percentages of the image, so they must anchor to a box
+             that hugs the image exactly — not the letterboxed screen -->
+        <div class="display-map-inner">
+          <img
+            :src="mediaUrl(String(state.payload.image_url))"
+            alt=""
+            class="display-map-img"
+          >
+          <span
+            v-for="(pin, index) in (state.payload.pins as any[] ?? [])"
+            :key="index"
+            class="display-map-pin"
+            :style="{ left: `${pin.x}%`, top: `${pin.y}%` }"
+          >
+            <span class="display-map-pin-dot" />
+            <span class="display-map-pin-label">{{ pin.label }}</span>
+          </span>
+        </div>
+      </div>
+      <p
+        v-if="state.payload.caption"
+        class="display-caption"
+      >
+        {{ state.payload.caption }}
+      </p>
+    </div>
+
     <!-- Initiative cast -->
     <div
       v-else-if="state.mode === 'initiative'"
@@ -250,6 +283,54 @@ useHead({ title: 'Display' })
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 999px;
+}
+
+.display-map-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.display-map-inner {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.display-map-img {
+  max-width: 100vw;
+  max-height: 100vh;
+  display: block;
+  animation: display-fade 600ms ease;
+}
+
+.display-map-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.display-map-pin-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background: rgb(255 140 60);
+  border: 3px solid rgb(255 255 255 / 85%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 60%);
+}
+
+.display-map-pin-label {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.15em 0.7em;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 65%);
+  white-space: nowrap;
 }
 
 .display-round {

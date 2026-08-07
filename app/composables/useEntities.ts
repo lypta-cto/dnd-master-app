@@ -1,4 +1,4 @@
-export type EntityType = 'npc' | 'character' | 'location' | 'item' | 'faction' | 'note' | 'session' | 'quest' | 'monster'
+export type EntityType = 'npc' | 'character' | 'location' | 'item' | 'faction' | 'note' | 'session' | 'quest' | 'monster' | 'map'
 export type Visibility = 'dm_only' | 'shared' | 'public'
 export type LinkRelation = 'mentions' | 'member_of' | 'located_in' | 'owns' | 'related_to'
 
@@ -41,6 +41,15 @@ export interface SearchHit extends EntitySummary {
   rank: number
 }
 
+export interface MapPin {
+  id: string
+  /** Percentages of the image, so pins survive any screen size */
+  x: number
+  y: number
+  entity_id?: string | null
+  label?: string
+}
+
 export interface EntityImage {
   id: string
   entity_id: string
@@ -79,6 +88,7 @@ export const ENTITY_TYPES: {
   { value: 'faction', label: 'Faction', plural: 'Factions', icon: 'i-lucide-flag' },
   { value: 'note', label: 'Note', plural: 'Notes', icon: 'i-lucide-scroll-text' },
   { value: 'monster', label: 'Monster', plural: 'Monsters', icon: 'i-lucide-skull' },
+  { value: 'map', label: 'Map', plural: 'Maps', icon: 'i-lucide-map' },
   { value: 'quest', label: 'Quest', plural: 'Quests', icon: 'i-lucide-target' },
   { value: 'session', label: 'Session', plural: 'Sessions', icon: 'i-lucide-calendar-days' }
 ]
@@ -129,6 +139,7 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'date', label: 'Date', placeholder: '2026-08-06' },
     { key: 'status', label: 'Status', options: ['planned', 'played'] }
   ],
+  map: [],
   monster: [
     { key: 'kind', label: 'Kind', options: ['aberration', 'beast', 'celestial', 'construct', 'dragon', 'elemental', 'fey', 'fiend', 'giant', 'humanoid', 'monstrosity', 'ooze', 'plant', 'undead'] },
     { key: 'cr', label: 'CR', placeholder: '1/4, 5, 13…' },

@@ -80,5 +80,7 @@ const searchGroups = computed(() => [
     />
 
     <ConfirmDialog />
+
+    <QuickNote />
   </UDashboardGroup>
 </template>

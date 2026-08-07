@@ -287,6 +287,13 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           </div>
         </ContentCard>
 
+        <MapViewer
+          v-if="entity.type === 'map'"
+          :key="`map-${entity.id}`"
+          :entity="entity"
+          :can-edit="isDm"
+        />
+
         <CharacterSheet
           v-if="entity.type === 'character'"
           :key="entity.id"

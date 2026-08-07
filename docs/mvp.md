@@ -58,14 +58,15 @@ Ono što kampanju čini stvarnom, ne demo-om.
   planned/played; prep i recap u telu sa `[[linkovima]]`) i `quest` (status, davalac,
   nagrada). **Dashboard je glava priče**: poslednji recap sa živim linkovima, sledeća
   planirana sesija, party sa HP, otvoreni questovi. Ostaje: checklist UI za prep.
-- **C4. Brze beleške u igri** — jedan input uvek dostupan (⌘J?): upiši ime/događaj u
-  toku igre, postane `note` sa datumom sesije, središ posle.
+- **C4. Brze beleške** ✓ — ⌘J bilo gde: prva linija je naslov, `[[imena]]` se sama
+  linkuju, snima se kao dm_only `note` sa tagom `table-note`; ⌘↵ i nazad u igru.
 
 ## Faza D — mape i svet
 
-- **D1. Mape** — slika + pinovi, svaki pin → entitet. Pin nasleđuje vidljivost
-  entiteta. Cast mod `map` sa izborom šta sto vidi. *Ne* virtuelni sto — bez fog of
-  war, bez pomeranja figura.
+- **D1. Mape** ✓ — tip `map`: cover slika + pinovi u procentima (klik-postavljanje,
+  pin → entitet iz pretrage ili slobodna labela). Cast mod `map`: sto vidi sliku i
+  samo pinove čiji je entitet shared/public — dm_only pinovi se filtriraju pri castu,
+  labele prolaze. Bez fog of war i tokena — nije virtuelni sto.
 - **D2. Kalendar sveta** *(opciono)* — in-world datum na sesijama i beleškama.
 
 ## Faza E — završnica
