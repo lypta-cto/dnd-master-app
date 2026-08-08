@@ -42,11 +42,20 @@ async function draftBody() {
 
   drafting.value = true
   try {
-    // The summary is the DM's own brief — the draft is built around it
+    // The summary is the DM's own brief, and the type's fields are what they
+    // have already decided — a kobold beggar came back as a human innkeeper
+    // when race and occupation stayed in the form instead of going with it.
+    const facts = Object.fromEntries(
+      typeFields.value
+        .map(field => [field.key, String(form.data[field.key] ?? '').trim()])
+        .filter(([, value]) => value)
+    )
+
     const { text } = await ai.draft({
       type: props.type,
       name: form.name.trim(),
-      brief: form.summary.trim() || null
+      brief: form.summary.trim() || null,
+      facts
     })
     // Never overwrite: a draft lands under whatever they already wrote
     form.body = form.body.trim() ? `${form.body.trim()}\n\n${text}` : text
@@ -67,18 +76,6 @@ const isCharacter = computed(() => props.type === 'character')
 
 const family = computed(() => ENTITY_FAMILY[props.type])
 const art = computed(() => FAMILY_ART[family.value])
-
-/**
- * Story beats put their own fields above the prose; everything else keeps
- * them beside it.
- *
- * For a scene or a clue those fields *are* the entry — what it's for, what
- * the party leaves knowing. They used to render underneath a fourteen-row
- * textarea, which put the point of the page below the fold behind an empty
- * box. For a monster or a location they're reference: true, worth having,
- * not what you came to write.
- */
-const fieldsLeadTheForm = computed(() => family.value === 'beat')
 
 /** Only offered while creating: afterwards the gallery on its own page owns it */
 const cover = ref<File | null>(null)
@@ -246,228 +243,220 @@ async function submit() {
 </script>
 
 <template>
-  <!-- The width cap lives on the card that holds this, so the card and the
-       form end together. On a wide monitor this used to stretch to the full
-       window and give a name field a thousand pixels, which is both harder to
-       scan and slower to fill in than a narrow one. -->
+  <!-- One column of stacked sections rather than a split. The split left a tall
+       column of prose beside a short column of settings, so half the form was
+       empty space next to the part you spend the longest in. -->
   <form
     class="space-y-6"
     @submit.prevent="submit"
   >
-    <div class="grid gap-6 lg:grid-cols-3">
-      <!-- What it is -->
-      <div class="space-y-5 lg:col-span-2">
-        <!-- A map with no image is nothing at all, so for places it leads -->
-        <CoverPicker
-          v-if="!entity && art === 'hero'"
-          v-model="cover"
-          hero
-          :label="`Drop the ${meta.label.toLowerCase()} image here, or click to choose`"
-        />
+    <!-- A map with no image is nothing at all, so for places it leads -->
+    <CoverPicker
+      v-if="!entity && art === 'hero'"
+      v-model="cover"
+      hero
+      :label="`Drop the ${meta.label.toLowerCase()} image here, or click to choose`"
+    />
 
-        <div class="grid gap-4 sm:grid-cols-2">
-          <UFormField
-            label="Name"
-            required
-            class="sm:col-span-2"
-          >
-            <UInput
-              v-model="form.name"
-              :placeholder="meta.label"
-              size="lg"
-              class="w-full"
-            />
-          </UFormField>
-
-          <UFormField
-            label="Summary"
-            help="One line, shown in lists and search."
-            class="sm:col-span-2"
-          >
-            <UInput
-              v-model="form.summary"
-              :placeholder="summaryHint"
-              class="w-full"
-            />
-          </UFormField>
-        </div>
-
-        <!-- For a scene or a clue these are the entry, not the reference -->
-        <TypeFields
-          v-if="fieldsLeadTheForm && typeFields.length"
-          v-model="form.data"
-          :fields="typeFields"
-        />
-
+    <div class="flex flex-col gap-5 sm:flex-row">
+      <div class="min-w-0 flex-1 space-y-4">
         <UFormField
-          :label="fieldsLeadTheForm ? 'Notes' : 'Body'"
-          help="Markdown. Write [[Entity Name]] to link — links resolve on save, and unresolved names are reported, not lost."
+          label="Name"
+          required
         >
-          <template
-            v-if="aiText"
-            #hint
-          >
-            <UButton
-              label="Draft it"
-              icon="i-lucide-sparkles"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              :loading="drafting"
-              :disabled="!form.name.trim()"
-              @click="draftBody"
-            />
-          </template>
-          <UTextarea
-            v-model="form.body"
-            :rows="fieldsLeadTheForm ? 8 : 14"
-            placeholder="The [[Goblin King]] fled toward [[Blackmoor Keep]]…"
-            class="w-full font-mono text-sm"
+          <UInput
+            v-model="form.name"
+            :placeholder="meta.label"
+            size="lg"
+            class="w-full"
           />
         </UFormField>
 
-        <!-- Behind the curtain: what the party wrongly believes, and what's true -->
-        <div
-          v-if="isDm"
-          class="space-y-4 rounded-xl border border-default p-4"
+        <UFormField
+          label="Summary"
+          help="One line, shown in lists and search. Drafts are written from it."
         >
-          <p class="flex items-center gap-2 text-sm font-medium text-highlighted">
-            <UIcon
-              name="i-lucide-eye-off"
-              class="size-4 text-dimmed"
-            />
-            Yours only — the API never sends this to a player
-          </p>
-
-          <UFormField
-            label="What the party believes"
-            help="The version they've been told. Handy to have next to the truth."
-          >
-            <UInput
-              :model-value="(form.data.dm_players_think as string | undefined) ?? ''"
-              placeholder="He is protecting the village."
-              class="w-full"
-              @update:model-value="value => (form.data.dm_players_think = value)"
-            />
-          </UFormField>
-
-          <UFormField
-            label="Notes"
-            help="Markdown, and [[links]] work here too."
-          >
-            <UTextarea
-              :model-value="(form.data.dm_notes as string | undefined) ?? ''"
-              :rows="5"
-              placeholder="He leads the cult feeding the artefact. Panics if you mention [[the Old Mill]]."
-              class="w-full font-mono text-sm"
-              @update:model-value="value => (form.data.dm_notes = value)"
-            />
-          </UFormField>
-        </div>
+          <UInput
+            v-model="form.summary"
+            :placeholder="summaryHint"
+            class="w-full"
+          />
+        </UFormField>
       </div>
 
-      <!-- Everything about it that isn't prose -->
-      <aside class="space-y-5">
-        <CoverPicker
-          v-if="!entity && art === 'portrait'"
-          v-model="cover"
+      <CoverPicker
+        v-if="!entity && art === 'portrait'"
+        v-model="cover"
+        class="shrink-0 sm:w-40"
+      />
+    </div>
+
+    <!-- Everything factual in one block: a monster's CR and who may see it are
+         the same kind of answer, and used to sit in two competing places -->
+    <div class="grid gap-4 sm:grid-cols-2">
+      <UFormField
+        v-if="isCharacter && isDm"
+        label="Player"
+        help="Whose character this is at the table."
+      >
+        <USelectMenu
+          v-model="form.player_id"
+          :items="playerItems"
+          value-key="value"
+          class="w-full"
         />
+      </UFormField>
 
-        <UFormField
-          v-if="isCharacter && isDm"
-          label="Player"
-          help="Whose character this is at the table."
-        >
-          <USelectMenu
-            v-model="form.player_id"
-            :items="playerItems"
-            value-key="value"
+      <UFormField
+        v-if="isDm"
+        label="Visibility"
+        :help="VISIBILITIES.find(v => v.value === form.visibility)?.hint"
+      >
+        <USelectMenu
+          v-model="form.visibility"
+          :items="visibilityItems"
+          value-key="value"
+          class="w-full"
+        />
+      </UFormField>
+
+      <TypeFields
+        v-if="typeFields.length"
+        v-model="form.data"
+        :fields="typeFields"
+      />
+
+      <UFormField
+        v-if="asksWhere"
+        label="Where"
+        class="sm:col-span-2"
+        :help="where
+          ? `Inside ${where.name}.`
+          : 'The place this sits in. Skip it and set it later.'"
+      >
+        <div class="space-y-2">
+          <UInput
+            v-if="!where"
+            v-model="whereQuery"
+            icon="i-lucide-map-pinned"
+            placeholder="Barovija, Vranov Brod…"
             class="w-full"
           />
-        </UFormField>
 
-        <UFormField
-          v-if="isDm"
-          label="Visibility"
-          :help="VISIBILITIES.find(v => v.value === form.visibility)?.hint"
-        >
-          <USelectMenu
-            v-model="form.visibility"
-            :items="visibilityItems"
-            value-key="value"
-            class="w-full"
+          <UButton
+            v-else
+            :label="where.name"
+            :icon="entityTypeMeta(where.type).icon"
+            trailing-icon="i-lucide-x"
+            color="neutral"
+            variant="soft"
+            @click="where = null; whereQuery = ''"
           />
-        </UFormField>
 
-        <UFormField
-          v-if="asksWhere"
-          label="Where"
-          :help="where
-            ? `Inside ${where.name}.`
-            : 'The place this sits in. Skip it and set it later.'"
-        >
-          <div class="space-y-2">
-            <UInput
-              v-if="!where"
-              v-model="whereQuery"
-              icon="i-lucide-map-pinned"
-              placeholder="Barovija, Vranov Brod…"
-              class="w-full"
-            />
-
-            <UButton
-              v-else
-              :label="where.name"
-              :icon="entityTypeMeta(where.type).icon"
-              trailing-icon="i-lucide-x"
-              color="neutral"
-              variant="soft"
-              block
-              @click="where = null; whereQuery = ''"
-            />
-
-            <div
-              v-if="!where && whereResults.length"
-              class="space-y-1"
+          <div
+            v-if="!where && whereResults.length"
+            class="space-y-1"
+          >
+            <button
+              v-for="hit in whereResults"
+              :key="hit.id"
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
+              @click="where = hit"
             >
-              <button
-                v-for="hit in whereResults"
-                :key="hit.id"
-                type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
-                @click="where = hit"
-              >
-                <UIcon
-                  :name="entityTypeMeta(hit.type).icon"
-                  class="size-4 shrink-0"
-                />
-                <span class="truncate">{{ hit.name }}</span>
-              </button>
-            </div>
-
-            <p
-              v-else-if="!where && whereQuery.trim()"
-              class="text-sm text-muted"
-            >
-              No places match — make the region or town first, or leave this empty.
-            </p>
+              <UIcon
+                :name="entityTypeMeta(hit.type).icon"
+                class="size-4 shrink-0"
+              />
+              <span class="truncate">{{ hit.name }}</span>
+            </button>
           </div>
-        </UFormField>
 
-        <TypeFields
-          v-if="!fieldsLeadTheForm && typeFields.length"
-          v-model="form.data"
-          :fields="typeFields"
+          <p
+            v-else-if="!where && whereQuery.trim()"
+            class="text-sm text-muted"
+          >
+            No places match — make the region or town first, or leave this empty.
+          </p>
+        </div>
+      </UFormField>
+
+      <UFormField
+        label="Tags"
+        class="sm:col-span-2"
+      >
+        <UInputTags
+          v-model="form.tags"
+          placeholder="Add a tag and press Enter"
+          class="w-full"
         />
+      </UFormField>
+    </div>
 
-        <UFormField label="Tags">
-          <UInputTags
-            v-model="form.tags"
-            placeholder="Add a tag and press Enter"
-            class="w-full"
-          />
-        </UFormField>
-      </aside>
+    <UFormField
+      label="Body"
+      help="Markdown. Write [[Entity Name]] to link — links resolve on save, and unresolved names are reported, not lost."
+    >
+      <template
+        v-if="aiText"
+        #hint
+      >
+        <UButton
+          label="Draft it"
+          icon="i-lucide-sparkles"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          :loading="drafting"
+          :disabled="!form.name.trim()"
+          @click="draftBody"
+        />
+      </template>
+      <UTextarea
+        v-model="form.body"
+        :rows="12"
+        placeholder="The [[Goblin King]] fled toward [[Blackmoor Keep]]…"
+        class="w-full font-mono text-sm"
+      />
+    </UFormField>
+
+    <!-- Behind the curtain: what the party wrongly believes, and what's true -->
+    <div
+      v-if="isDm"
+      class="space-y-4 rounded-xl border border-default p-4"
+    >
+      <p class="flex items-center gap-2 text-sm font-medium text-highlighted">
+        <UIcon
+          name="i-lucide-eye-off"
+          class="size-4 text-dimmed"
+        />
+        Yours only — the API never sends this to a player
+      </p>
+
+      <UFormField
+        label="What the party believes"
+        help="The version they've been told. Handy to have next to the truth."
+      >
+        <UInput
+          :model-value="(form.data.dm_players_think as string | undefined) ?? ''"
+          placeholder="He is protecting the village."
+          class="w-full"
+          @update:model-value="value => (form.data.dm_players_think = value)"
+        />
+      </UFormField>
+
+      <UFormField
+        label="Notes"
+        help="Markdown, and [[links]] work here too."
+      >
+        <UTextarea
+          :model-value="(form.data.dm_notes as string | undefined) ?? ''"
+          :rows="5"
+          placeholder="He leads the cult feeding the artefact. Panics if you mention [[the Old Mill]]."
+          class="w-full font-mono text-sm"
+          @update:model-value="value => (form.data.dm_notes = value)"
+        />
+      </UFormField>
     </div>
 
     <div class="flex justify-end gap-2 border-t border-default pt-4">

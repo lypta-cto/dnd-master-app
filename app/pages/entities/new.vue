@@ -3,11 +3,10 @@ const route = useRoute()
 const toast = useToast()
 const { isDm } = useCampaigns()
 
-const type = ref<EntityType>(
-  ENTITY_TYPES.some(t => t.value === route.query.type)
-    ? (route.query.type as EntityType)
-    : 'npc'
-)
+/** Did whoever sent us here already decide what this is? */
+const typeFromUrl = ENTITY_TYPES.some(t => t.value === route.query.type)
+
+const type = ref<EntityType>(typeFromUrl ? (route.query.type as EntityType) : 'npc')
 
 // A player only ever creates their own character
 if (!isDm.value) {
@@ -37,12 +36,14 @@ async function onSaved(entity: EntityDetail) {
       { label: 'New' }
     ]"
   >
-    <!-- The type is already in the title and the breadcrumb; thirteen buttons
-         saying it again were the first thing the eye landed on and the last
-         thing that mattered. A picker for the rare case of changing your mind. -->
-    <template #actions>
+    <!-- Only when nobody has said what this is. Arriving from "New NPC" the
+         type is settled, and a picker repeating it in the corner is a control
+         that answers a question you didn't ask. -->
+    <template
+      v-if="isDm && !typeFromUrl"
+      #actions
+    >
       <USelectMenu
-        v-if="isDm"
         v-model="type"
         :items="typeItems"
         value-key="value"

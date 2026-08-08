@@ -37,8 +37,10 @@ onMounted(async () => {
  * tiers is much smaller than the difference a good prompt makes.
  */
 const QUALITIES = [
-  { value: 'draft' as const, label: 'Draft', hint: 'about ¼¢' },
-  { value: 'good' as const, label: 'Good', hint: 'under 1¢, richer' }
+  // Coins, because that's the unit the purse in the top bar counts down in.
+  // Quoting cents here and coins there made the DM do the conversion.
+  { value: 'draft' as const, label: 'Draft', hint: '~24 coins' },
+  { value: 'good' as const, label: 'Good', hint: '~87 coins, richer' }
 ]
 
 const illustrateMenu = computed(() =>
@@ -61,7 +63,9 @@ async function illustrate(quality: 'draft' | 'good') {
 
     // The provider's own figure, not our estimate of it
     toast.add({
-      title: `Illustration added — ${image.cents.toFixed(2)}¢`,
+      // Coins: the same unit the purse counts down in, from the provider's
+      // own figure rather than the menu's estimate
+      title: `Illustration added — ${Math.round(image.cents * 100).toLocaleString()} coins`,
       icon: 'i-lucide-sparkles',
       color: 'success'
     })

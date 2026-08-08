@@ -50,7 +50,9 @@ export function useAi() {
     name: string
     brief?: string | null
     use_campaign_context?: boolean
-  }) => api.post<{ text: string }>(`${base()}/draft`, payload)
+    /** The type's own fields as they stand in the form — unsaved, so sent */
+    facts?: Record<string, string>
+  }) => api.post<{ text: string, cents: number }>(`${base()}/draft`, payload)
 
   /** Draws what's already written and files it in the entity's gallery */
   const illustrate = (
