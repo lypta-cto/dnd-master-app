@@ -135,6 +135,7 @@ function persistFog() {
     try {
       await entities.setFog(props.entity.id, next)
       fog.value = next
+      await pushIfLive()
     } catch (error) {
       toast.add({
         title: apiErrorMessage(error, 'Fog not saved'),
@@ -271,6 +272,7 @@ async function persist() {
     }
 
     await entities.update(props.entity.id, { data })
+    await pushIfLive()
   } catch (error) {
     toast.add({ title: apiErrorMessage(error, 'Save failed'), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
@@ -303,53 +305,89 @@ async function removePin(id: string) {
 
 const castingMap = ref(false)
 
-async function castMap() {
-  if (!props.entity.image_url) {
-    return
+/**
+ * Whether a pin's entity may be seen by players, remembered.
+ *
+ * The map re-casts on every stroke of fog now, and asking the API about the
+ * same six pins each time would turn a brush into a flood of requests.
+ */
+const pinVisibility = new Map<string, string | null>()
+
+/** The name to show the table, or null when the party shouldn't see it at all */
+async function pinNameForTable(entityId: string): Promise<string | null> {
+  const remembered = pinVisibility.get(entityId)
+  if (remembered !== undefined) {
+    return remembered
   }
-  castingMap.value = true
 
   try {
-    // The table sees a pin only if its entity is something players may know
-    // about. Label-only pins are deliberate DM annotations — they go through.
-    const visiblePins: { x: number, y: number, label: string }[] = []
+    const linked = await entities.read(entityId)
+    pinVisibility.set(entityId, linked.visibility === 'dm_only' ? null : linked.name)
+  } catch {
+    pinVisibility.set(entityId, null) // deleted or hidden — not for the table
+  }
 
-    for (const pin of pins.value) {
-      // A pin standing in fog names the thing the fog is hiding. "Dragon lair"
-      // floating over an unexplored corner gives the game away more cheaply
-      // than the map ever would.
-      if (!isRevealed(pin.x, pin.y)) {
-        continue
-      }
+  return pinVisibility.get(entityId)!
+}
 
-      if (pin.entity_id) {
-        try {
-          const linked = await entities.read(pin.entity_id)
-          if (linked.visibility === 'dm_only') {
-            continue
-          }
-          visiblePins.push({ x: pin.x, y: pin.y, label: pin.label || linked.name })
-        } catch {
-          continue // deleted or hidden — either way, not for the table
-        }
-      } else if (pin.label) {
-        visiblePins.push({ x: pin.x, y: pin.y, label: pin.label })
-      }
+/** What the table should be looking at, as the party knows it */
+async function buildCastState(): Promise<{ state: CastState, shown: number }> {
+  // The table sees a pin only if its entity is something players may know
+  // about. Label-only pins are deliberate DM annotations — they go through.
+  const visiblePins: { x: number, y: number, label: string }[] = []
+
+  for (const pin of pins.value) {
+    // A pin standing in fog names the thing the fog is hiding. "Dragon lair"
+    // floating over an unexplored corner gives the game away more cheaply
+    // than the map ever would.
+    if (!isRevealed(pin.x, pin.y)) {
+      continue
     }
 
-    const result = await cast.set({
+    if (pin.entity_id) {
+      // The pin's own label wins; the entity's name is the fallback for a pin
+      // dropped straight onto something without renaming it
+      const name = await pinNameForTable(pin.entity_id)
+      if (name) {
+        visiblePins.push({ x: pin.x, y: pin.y, label: pin.label || name })
+      }
+    } else if (pin.label) {
+      visiblePins.push({ x: pin.x, y: pin.y, label: pin.label })
+    }
+  }
+
+  return {
+    shown: visiblePins.length,
+    state: {
       mode: 'map',
       payload: {
+        // So the top bar can name this and link back to it
+        entity_id: props.entity.id,
         image_url: props.entity.image_url,
         caption: props.entity.name,
         pins: visiblePins,
         // The table sees the map as the party knows it, not as the DM does
         fog: fog.value ? { ...fog.value, mask: encodeCells(cells.value) } : null
       }
-    })
+    }
+  }
+}
+
+async function castMap() {
+  if (!props.entity.image_url) {
+    return
+  }
+  castingMap.value = true
+  // Casting deliberately is also the DM's way of saying "look again" — a pin
+  // whose entity they just shared should appear without a reload
+  pinVisibility.clear()
+
+  try {
+    const { state, shown } = await buildCastState()
+    const result = await cast.set(state)
 
     toast.add({
-      title: `Map on the table (${visiblePins.length}/${pins.value.length} pins shown)`,
+      title: `Map on the table (${shown}/${pins.value.length} pins shown)`,
       icon: 'i-lucide-map',
       color: result.displays_connected ? 'success' : 'warning',
       description: result.displays_connected ? undefined : 'No display connected'
@@ -358,6 +396,28 @@ async function castMap() {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
     castingMap.value = false
+  }
+}
+
+/**
+ * Follow-up for a map that's already up.
+ *
+ * Casting was a snapshot: clear some fog after casting and the table kept
+ * showing the old map until you noticed and cast again. Now every change the
+ * party is entitled to see reaches them as it happens — and only if this map
+ * is the one they're looking at, so moving a pin never puts a map on screen
+ * that nobody meant to show.
+ */
+async function pushIfLive() {
+  if (!cast.isShowing(props.entity.id)) {
+    return
+  }
+  try {
+    const { state } = await buildCastState()
+    await cast.recast(props.entity.id, state)
+  } catch {
+    // The table lagging by one stroke isn't worth interrupting the DM over;
+    // the next change pushes the current state anyway.
   }
 }
 </script>

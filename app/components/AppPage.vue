@@ -75,6 +75,8 @@ useHead({ title: props.title })
         </template>
 
         <template #right>
+          <CastIndicator />
+
           <UDashboardSearchButton
             class="app-icon-btn"
             collapsed

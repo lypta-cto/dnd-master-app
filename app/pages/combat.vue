@@ -14,7 +14,13 @@ const toast = useToast()
 
 const state = ref<CombatState>({ active: false, round: 1, turn_index: 0, combatants: [] })
 const loading = ref(true)
-const casting = ref(false)
+/**
+ * Read from what's actually on the table, not from a local flag.
+ *
+ * A local one said "off" every time the DM came back to this page, so the
+ * switch claimed nothing was being shown while the party watched initiative.
+ */
+const casting = computed(() => cast.showing.value?.mode === 'initiative')
 
 const characters = ref<EntitySummary[]>([])
 const monsters = ref<EntitySummary[]>([])
@@ -176,7 +182,6 @@ async function castInitiative() {
 }
 
 async function toggleCasting(value: boolean) {
-  casting.value = value
   try {
     if (value) {
       await castInitiative()
@@ -279,7 +284,6 @@ async function end() {
   await combat.set(state.value)
 
   if (casting.value) {
-    casting.value = false
     await cast.clear()
   }
   toast.add({ title: `Combat ended after round ${state.value.round}`, icon: 'i-lucide-flag', color: 'success' })

@@ -9,10 +9,31 @@ export interface CastStatus extends CastState {
   displays_connected: number
 }
 
-/** DM-side controls for the table's screen. */
+/** Human names for the chip in the top bar */
+const MODE_LABELS: Record<CastMode, string> = {
+  idle: 'Nothing',
+  image: 'Image',
+  slideshow: 'Slideshow',
+  text: 'Text',
+  initiative: 'Initiative',
+  map: 'Map',
+  dice: 'Dice'
+}
+
+/**
+ * DM-side controls for the table's screen.
+ *
+ * The current state is shared app-wide rather than fetched per page, because
+ * what's on the table outlives the page that put it there: the DM casts a map,
+ * walks to the combat screen, and still needs to know the map is up — and the
+ * map still needs to push its changes when they walk back and move a pin.
+ */
 export function useCast() {
   const api = useApi()
   const { currentId } = useCampaigns()
+
+  const current = useState<CastStatus | null>('cast-current', () => null)
+  const loadedFor = useState<string | null>('cast-loaded-for', () => null)
 
   function base() {
     if (!currentId.value) {
@@ -21,11 +42,72 @@ export function useCast() {
     return `/campaigns/${currentId.value}/cast`
   }
 
-  const status = () => api.get<CastStatus>(base())
-  const set = (state: CastState) => api.put<CastStatus>(base(), state)
-  const clear = () => api.put<CastStatus>(base(), { mode: 'idle', payload: {} })
+  /** What's on the table, or null while nothing is */
+  const showing = computed(() =>
+    current.value && current.value.mode !== 'idle' ? current.value : null
+  )
 
-  return { status, set, clear }
+  const showingLabel = computed(() =>
+    showing.value ? MODE_LABELS[showing.value.mode] : null
+  )
+
+  /** The entity behind it, when there is one — so the chip can link somewhere */
+  const showingEntityId = computed(() => {
+    const id = showing.value?.payload?.entity_id
+    return typeof id === 'string' ? id : null
+  })
+
+  async function status(force = false) {
+    if (!currentId.value) {
+      return null
+    }
+    if (!force && loadedFor.value === currentId.value) {
+      return current.value
+    }
+
+    current.value = await api.get<CastStatus>(base())
+    loadedFor.value = currentId.value
+    return current.value
+  }
+
+  async function set(state: CastState) {
+    const result = await api.put<CastStatus>(base(), state)
+    current.value = result
+    loadedFor.value = currentId.value
+    return result
+  }
+
+  const clear = () => set({ mode: 'idle', payload: {} })
+
+  /** Is this entity the thing the table is looking at right now? */
+  const isShowing = (entityId: string) => showingEntityId.value === entityId
+
+  /**
+   * Push a change only when it's already on the table.
+   *
+   * This is what makes casting a live link rather than a snapshot: paint fog
+   * or drag a pin on a map that's up, and the table follows. Cast nothing if
+   * nothing is showing — moving a pin should never surprise the party with a
+   * map they weren't being shown.
+   */
+  async function recast(entityId: string, state: CastState) {
+    if (!isShowing(entityId)) {
+      return null
+    }
+    return set(state)
+  }
+
+  return {
+    current,
+    showing,
+    showingLabel,
+    showingEntityId,
+    status,
+    set,
+    clear,
+    isShowing,
+    recast
+  }
 }
 
 /**

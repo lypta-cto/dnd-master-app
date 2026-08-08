@@ -21,7 +21,8 @@ async function load() {
     return
   }
 
-  const [state, campaign] = await Promise.all([cast.status(), detail(current.value.id)])
+  // Forced: this page is the one that has to show the truth, cache or not
+  const [state, campaign] = await Promise.all([cast.status(true), detail(current.value.id)])
   status.value = state
   displayToken.value = campaign.display_token
 }
@@ -33,7 +34,9 @@ let poll: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   poll = setInterval(async () => {
     if (current.value && isDm.value) {
-      status.value = await cast.status()
+      // The connected count only changes on the server, so this must not
+      // be served from the shared copy
+      status.value = await cast.status(true)
     }
   }, 5000)
 })
