@@ -29,6 +29,8 @@ export interface EntityDetail extends EntitySummary {
   updated_at: string
   links: LinkedEntity[]
   backlinks: LinkedEntity[]
+  /** Where this sits in the world, outermost first: region, town, building */
+  ancestors: EntitySummary[]
   unresolved_links: string[]
 }
 
@@ -202,7 +204,9 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'voice', label: 'Voice & manner', placeholder: 'How to play them: accent, tics, mood' }
   ],
   location: [
-    { key: 'kind', label: 'Kind', options: ['city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'] },
+    // Region first, because it's the outermost thing you pick when building a
+    // world downward — and the one a town needs to point at.
+    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'] },
     { key: 'region', label: 'Region', placeholder: 'Barovia, Sword Coast…' }
   ],
   item: [

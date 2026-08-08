@@ -354,6 +354,15 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           </div>
         </ContentCard>
 
+        <!-- Only for the things a world is actually built out of. A magic
+             sword has an owner, not a location it belongs inside. -->
+        <EntityPlacement
+          v-if="['location', 'scene', 'encounter'].includes(entity.type)"
+          :entity="entity"
+          :can-edit="isDm"
+          @changed="load"
+        />
+
         <MapViewer
           v-if="entity.type === 'map'"
           :key="`map-${entity.id}`"
