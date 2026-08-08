@@ -5,6 +5,25 @@ export interface AiStatus {
   images: boolean
 }
 
+export interface CoinEntry {
+  id: string
+  entry_type: 'topup' | 'text' | 'image'
+  /** Negative for a generation, positive for money added */
+  coins: number
+  detail: string
+  created_at: string
+}
+
+export interface Purse {
+  balance: number
+  added: number
+  spent_on_text: number
+  spent_on_images: number
+  spent_usd: number
+  coins_per_dollar: number
+  entries: CoinEntry[]
+}
+
 /**
  * Drafting help, when it's switched on.
  *
@@ -48,5 +67,16 @@ export function useAi() {
       payload
     )
 
-  return { status, draft, illustrate }
+  /* --- The purse ---------------------------------------------------------
+   * Generation costs fractions of a cent, which is a hopeless unit for a
+   * running total: the number never moves. Coins are sized so the cheapest
+   * thing the app does still costs more than one of them.
+   */
+
+  const purse = () => api.get<Purse>(`${base()}/purse`)
+
+  /** Recording money already put on the provider account — nothing is charged */
+  const topUp = (usd: number) => api.post<Purse>(`${base()}/purse/topup`, { usd })
+
+  return { status, draft, illustrate, purse, topUp }
 }

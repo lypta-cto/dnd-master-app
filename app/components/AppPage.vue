@@ -76,6 +76,7 @@ useHead({ title: props.title })
 
         <template #right>
           <CastIndicator />
+          <CoinPurse />
 
           <UDashboardSearchButton
             class="app-icon-btn"

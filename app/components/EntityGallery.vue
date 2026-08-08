@@ -104,8 +104,13 @@ function pickFocus() {
 }
 
 async function onFocusPicked(point: { x: number, y: number }) {
+  // Read first: `data` is replaced whole on write, and the copy in props is
+  // whatever the page loaded with. On a map that has been painted since,
+  // sending it back would erase the fog — the same trap the map viewer hit.
+  const fresh = await entities.read(props.entity.id)
+
   await entities.update(props.entity.id, {
-    data: { ...props.entity.data, cover_focus: point }
+    data: { ...fresh.data, cover_focus: point }
   })
   emit('focusChanged', point)
   toast.add({

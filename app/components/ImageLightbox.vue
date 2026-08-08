@@ -46,7 +46,12 @@ function onImageClick(event: MouseEvent) {
         class="relative flex h-full w-full items-center justify-center p-6"
         @click.self="open = false"
       >
-        <div class="relative max-h-full max-w-full">
+        <!-- `w-fit` so this box is the picture and nothing more. It used to be
+             a plain block, which stretches to the full width of the screen —
+             so the marker, positioned as a percentage of *this*, drifted away
+             from the spot that had been clicked on a portrait or any image
+             narrower than the window. -->
+        <div class="relative max-h-full w-fit max-w-full">
           <img
             :src="src"
             :alt="caption ?? ''"
