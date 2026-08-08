@@ -63,6 +63,41 @@ const roster = ref<Player[]>([])
 
 const isCharacter = computed(() => props.type === 'character')
 
+/* --- Where it happens -------------------------------------------------------
+ * Asked while creating, not afterwards. A scene made without a place is a
+ * scene nobody puts anywhere: the world gets built from the outside in — the
+ * region, then the town, then what happens there — and the moment the DM is
+ * thinking about the scene is the moment they know where it is.
+ *
+ * Creation only. Once it exists, the "In the world" card on its own page owns
+ * this, and two controls for one relation would only disagree with each other.
+ */
+const PLACEABLE: EntityType[] = ['location', 'scene', 'encounter']
+
+const asksWhere = computed(() => !props.entity && PLACEABLE.includes(props.type))
+
+const where = ref<EntitySummary | null>(null)
+const whereQuery = ref('')
+const whereResults = ref<EntitySummary[]>([])
+
+let whereTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(whereQuery, (q) => {
+  clearTimeout(whereTimer)
+
+  if (!q.trim()) {
+    whereResults.value = []
+    return
+  }
+
+  whereTimer = setTimeout(async () => {
+    const page = await entities.list({ type: 'location', q: q.trim(), page_size: 8 })
+    whereResults.value = page.items
+  }, 250)
+})
+
+onBeforeUnmount(() => clearTimeout(whereTimer))
+
 onMounted(async () => {
   if (isCharacter.value && isDm.value) {
     roster.value = await players.list()
@@ -119,6 +154,24 @@ async function submit() {
     const saved = props.entity
       ? await entities.update(props.entity.id, payload)
       : await entities.create({ ...payload, type: props.type })
+
+    if (!props.entity && where.value) {
+      // After creation, because the link needs both ends to exist. Its result
+      // is deliberately discarded: it's the shorter read shape, and putting it
+      // in `saved` would drop the fields the toasts below read. A failure here
+      // must not lose the entity the DM just wrote — it exists, it's simply
+      // unplaced, and the card on its own page fixes that in two clicks.
+      try {
+        await entities.link(saved.id, where.value.id, 'located_in')
+      } catch {
+        toast.add({
+          title: `Created, but not placed in ${where.value.name}`,
+          description: 'Set it from the “In the world” card.',
+          icon: 'i-lucide-map-pin-off',
+          color: 'warning'
+        })
+      }
+    }
 
     if (saved.rewritten_references) {
       toast.add({
@@ -190,6 +243,64 @@ async function submit() {
         />
       </UFormField>
     </div>
+
+    <UFormField
+      v-if="asksWhere"
+      label="Where"
+      :help="where
+        ? `Inside ${where.name}. Everything under it inherits the place.`
+        : 'The place this sits in. Skip it and set it later from the page itself.'"
+    >
+      <div class="space-y-2">
+        <UInput
+          v-if="!where"
+          v-model="whereQuery"
+          icon="i-lucide-map-pinned"
+          placeholder="Barovija, Vranov Brod…"
+          class="w-full"
+        />
+
+        <UButton
+          v-else
+          :label="where.name"
+          :icon="entityTypeMeta(where.type).icon"
+          trailing-icon="i-lucide-x"
+          color="neutral"
+          variant="soft"
+          @click="where = null; whereQuery = ''"
+        />
+
+        <div
+          v-if="!where && whereResults.length"
+          class="space-y-1"
+        >
+          <button
+            v-for="hit in whereResults"
+            :key="hit.id"
+            type="button"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
+            @click="where = hit"
+          >
+            <UIcon
+              :name="entityTypeMeta(hit.type).icon"
+              class="size-4 shrink-0"
+            />
+            <span class="truncate">{{ hit.name }}</span>
+            <span
+              v-if="hit.data.kind"
+              class="ml-auto shrink-0 text-xs capitalize text-dimmed"
+            >{{ hit.data.kind }}</span>
+          </button>
+        </div>
+
+        <p
+          v-else-if="!where && whereQuery.trim()"
+          class="text-sm text-muted"
+        >
+          No places match — make the region or town first, or leave this empty.
+        </p>
+      </div>
+    </UFormField>
 
     <UFormField label="Summary">
       <UInput

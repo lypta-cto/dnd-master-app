@@ -125,6 +125,49 @@ watch([type, () => current.value?.id, applied, sort, page, layout], load, { imme
 
 const title = computed(() => meta.value?.plural ?? 'All entities')
 
+/* --- Grouped by where it happens --------------------------------------------
+ * A flat list of scenes is a list of titles with no idea what they belong to.
+ * Grouping them under their place turns the same page into the shape of the
+ * world — which is the whole reason places contain things.
+ *
+ * Only for types that sit inside somewhere, and only when the DM isn't already
+ * narrowing the list: a search result should be the matches, in one list, not
+ * matches scattered across headings.
+ */
+const GROUPABLE: EntityType[] = ['scene', 'encounter', 'location']
+
+const grouped = computed(() => {
+  if (!type.value || !GROUPABLE.includes(type.value) || applied.value || !pageData.value) {
+    return null
+  }
+
+  const byPlace = new Map<string, { place: { id: string, name: string } | null, items: EntitySummary[] }>()
+
+  for (const item of pageData.value.items) {
+    // One bucket for everything unplaced, and it sorts last — it's a to-do
+    // list, not a place.
+    const key = item.parent?.id ?? ''
+    const bucket = byPlace.get(key) ?? { place: item.parent ?? null, items: [] }
+    bucket.items.push(item)
+    byPlace.set(key, bucket)
+  }
+
+  // Nothing to show off if everything is in one bucket
+  if (byPlace.size < 2 && !byPlace.has('')) {
+    return null
+  }
+
+  return [...byPlace.values()].sort((a, b) => {
+    if (!a.place) {
+      return 1
+    }
+    if (!b.place) {
+      return -1
+    }
+    return a.place.name.localeCompare(b.place.name)
+  })
+})
+
 /* --- Bulk visibility -------------------------------------------------------
  * Sharing a batch of NPCs after a session used to mean opening each one. Here
  * the DM picks several cards and flips them together.
@@ -402,8 +445,74 @@ watch([type, () => current.value?.id], () => {
           </ul>
         </ContentCard>
 
+        <!-- Grouped by place: the same cards, under the world they belong to -->
         <div
-          v-if="layout === 'grid'"
+          v-if="grouped"
+          class="space-y-6"
+        >
+          <section
+            v-for="group in grouped"
+            :key="group.place?.id ?? 'unplaced'"
+            class="space-y-2"
+          >
+            <div class="flex items-center gap-2">
+              <NuxtLink
+                v-if="group.place"
+                :to="`/entities/${group.place.id}`"
+                class="flex items-center gap-1.5 text-sm font-medium text-highlighted hover:text-primary"
+              >
+                <UIcon
+                  name="i-lucide-map-pinned"
+                  class="size-4 text-dimmed"
+                />
+                {{ group.place.name }}
+              </NuxtLink>
+              <span
+                v-else
+                class="flex items-center gap-1.5 text-sm font-medium text-muted"
+              >
+                <UIcon
+                  name="i-lucide-map-pin-off"
+                  class="size-4 text-dimmed"
+                />
+                Not placed yet
+              </span>
+              <span class="text-xs tabular-nums text-dimmed">{{ group.items.length }}</span>
+            </div>
+
+            <div
+              v-if="layout === 'grid'"
+              class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+            >
+              <EntityCard
+                v-for="entity in group.items"
+                :key="entity.id"
+                :entity="entity"
+                :no-visibility="!isDm"
+                :selectable="selecting"
+                :selected="selected.includes(entity.id)"
+                @toggle="toggle"
+              />
+            </div>
+            <div
+              v-else
+              class="app-card overflow-hidden p-0"
+            >
+              <EntityRow
+                v-for="entity in group.items"
+                :key="entity.id"
+                :entity="entity"
+                :no-visibility="!isDm"
+                :selectable="selecting"
+                :selected="selected.includes(entity.id)"
+                @toggle="toggle"
+              />
+            </div>
+          </section>
+        </div>
+
+        <div
+          v-else-if="layout === 'grid'"
           class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
         >
           <EntityCard

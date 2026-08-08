@@ -15,6 +15,13 @@ export interface EntitySummary {
   visibility: Visibility
   tags: string[]
   data: Record<string, unknown>
+  /**
+   * Where it sits, when the listing endpoint was the one that fetched it.
+   *
+   * Null everywhere else — search results and link panels don't pay for the
+   * lookup, so don't read this outside a list.
+   */
+  parent?: { id: string, name: string, type: EntityType } | null
 }
 
 export interface LinkedEntity extends EntitySummary {
