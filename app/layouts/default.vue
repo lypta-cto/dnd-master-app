@@ -43,6 +43,11 @@ const searchGroups = computed(() => [
     ? [{
         id: 'campaign',
         label: 'In this campaign',
+        // The palette fuzzy-matches item labels against what's typed, which
+        // throws away results the server already decided were matches — "kovac"
+        // does not literally occur in "Miloš Kovač", so every hit vanished and
+        // the box said there was nothing. The API did the matching; trust it.
+        ignoreFilter: true,
         items: hits.value.map(hit => ({
           label: hit.name,
           suffix: hit.summary ?? undefined,
@@ -54,11 +59,14 @@ const searchGroups = computed(() => [
   {
     id: 'navigation',
     label: 'Navigation',
-    items: [...mainNav.value.flat(), ...footerNav.value].map(({ label, icon, to }) => ({
-      label,
-      icon,
-      to
-    }))
+    // `flat()` alone stops at the section headings. Since the sidebar grew
+    // collapsible Story and World groups, the entity types live one level
+    // further down — so ⌘K quietly lost "Scenes", "NPCs" and everything else
+    // that had moved inside them, and offered two unclickable headings instead.
+    items: [...mainNav.value.flat(), ...footerNav.value]
+      .flatMap(item => (item.children?.length ? item.children : [item]))
+      .filter(item => !!item.to)
+      .map(({ label, icon, to }) => ({ label, icon, to }))
   },
   ...appGroups.value
 ])

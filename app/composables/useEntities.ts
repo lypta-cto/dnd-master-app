@@ -213,8 +213,12 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   location: [
     // Region first, because it's the outermost thing you pick when building a
     // world downward — and the one a town needs to point at.
-    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'] },
-    { key: 'region', label: 'Region', placeholder: 'Barovia, Sword Coast…' }
+    //
+    // There used to be a free-text "Region" field here too. Containment says
+    // the same thing now, and better: it links, it nests, and it draws a
+    // breadcrumb. Two ways to record where something is would have drifted
+    // apart the first time someone used one and not the other.
+    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'] }
   ],
   item: [
     { key: 'rarity', label: 'Rarity', options: ['common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'] },
