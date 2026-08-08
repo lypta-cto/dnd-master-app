@@ -20,11 +20,26 @@ const loading = ref(true)
  * A local one said "off" every time the DM came back to this page, so the
  * switch claimed nothing was being shown while the party watched initiative.
  */
-const casting = computed(() => cast.showing.value?.mode === 'initiative')
+const casting = computed(() => !!cast.current.value?.initiative?.entries?.length)
 
 const characters = ref<EntitySummary[]>([])
 const monsters = ref<EntitySummary[]>([])
 const customName = ref('')
+
+/**
+ * Filtered here rather than re-fetched: the whole bestiary is already loaded
+ * for this screen, and a request per keystroke mid-fight is latency the table
+ * would feel. Folded, so "kovac" finds "Kovač" like everywhere else.
+ */
+const monsterQuery = ref('')
+
+const shownMonsters = computed(() => {
+  const needle = fold(monsterQuery.value.trim())
+  if (!needle) {
+    return monsters.value
+  }
+  return monsters.value.filter(monster => fold(monster.name).includes(needle))
+})
 
 const QUICK_CONDITIONS = ['prone', 'poisoned', 'stunned', 'restrained', 'frightened', 'concentrating']
 
@@ -193,30 +208,43 @@ async function syncCharacterSheets() {
 
 defineShortcuts({ meta_z: undo })
 
-/** What the table is allowed to know: order, turn, who's down. Never monster HP. */
+/**
+ * The order of turns, as a strip above whatever else is on the wall.
+ *
+ * It used to be a cast mode of its own, which meant the table could see the
+ * order *or* the battle map and never both — and casting the map silently
+ * took the order away mid-fight. It has its own lifetime now: up while the
+ * fight runs, underneath everything cast in between.
+ *
+ * What the table is allowed to know: order, whose turn, who is down. Never a
+ * monster's remaining hit points.
+ */
 async function castInitiative() {
-  await cast.set({
-    mode: 'initiative',
-    payload: {
-      round: state.value.round,
-      active_id: activeId.value,
-      combatants: ordered.value.map(c => ({
-        id: c.id,
-        name: c.name,
-        kind: c.kind,
-        down: c.current_hp === 0
-      }))
-    }
-  })
+  await cast.setInitiative(
+    ordered.value.map(c => ({
+      name: c.name,
+      kind: c.kind,
+      down: c.current_hp === 0,
+      active: c.id === activeId.value
+    })),
+    state.value.round
+  )
 }
+
+/** Empty takes the strip down — the fight is over, so the header goes too */
+const clearInitiative = () => cast.setInitiative([])
 
 async function toggleCasting(value: boolean) {
   try {
     if (value) {
       await castInitiative()
-      toast.add({ title: 'Initiative on the table display', icon: 'i-lucide-cast', color: 'success' })
+      toast.add({
+        title: 'Initiative above whatever else is on the table',
+        icon: 'i-lucide-cast',
+        color: 'success'
+      })
     } else {
-      await cast.clear()
+      await clearInitiative()
     }
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
@@ -312,8 +340,9 @@ async function end() {
   clearTimeout(saveTimer)
   await combat.set(state.value)
 
+  // The strip comes down with the fight; whatever else is on the wall stays
   if (casting.value) {
-    await cast.clear()
+    await clearInitiative()
   }
   toast.add({ title: `Combat ended after round ${state.value.round}`, icon: 'i-lucide-flag', color: 'success' })
 }
@@ -534,8 +563,11 @@ function hpPercent(combatant: Combatant) {
             :class="state.active && combatant.id === activeId && 'bg-primary/5 ring-1 ring-inset ring-primary/30'"
           >
             <div class="flex flex-wrap items-center gap-3">
-              <!-- Initiative -->
+              <!-- Only once the fight is running. Before that this screen is
+                   for assembling who's in it, and a column of zeroes to tab
+                   through is noise you have to look past. -->
               <UInputNumber
+                v-if="state.active"
                 :model-value="combatant.initiative"
                 :min="-10"
                 :max="50"
@@ -680,17 +712,34 @@ function hpPercent(combatant: Combatant) {
           icon="i-lucide-skull"
           description="Click again for another copy — they number themselves."
         >
-          <div class="flex flex-wrap gap-1.5">
-            <UButton
-              v-for="monster in monsters"
-              :key="monster.id"
-              :label="monster.name"
-              icon="i-lucide-plus"
+          <div class="space-y-2">
+            <!-- A campaign accumulates a bestiary; a wall of buttons stops
+                 being findable somewhere around thirty of them -->
+            <UInput
+              v-model="monsterQuery"
+              icon="i-lucide-search"
+              placeholder="Goblin, wolf, cultist…"
               size="sm"
-              color="neutral"
-              variant="outline"
-              @click="addMonster(monster)"
+              class="w-full"
             />
+            <div class="flex flex-wrap gap-1.5">
+              <UButton
+                v-for="monster in shownMonsters"
+                :key="monster.id"
+                :label="monster.name"
+                icon="i-lucide-plus"
+                size="sm"
+                color="neutral"
+                variant="outline"
+                @click="addMonster(monster)"
+              />
+            </div>
+            <p
+              v-if="monsterQuery.trim() && !shownMonsters.length"
+              class="text-sm text-muted"
+            >
+              Nothing matches “{{ monsterQuery }}”.
+            </p>
           </div>
           <p
             v-if="!monsters.length"

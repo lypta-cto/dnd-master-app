@@ -1,8 +1,22 @@
 export type CastMode = 'idle' | 'image' | 'slideshow' | 'text' | 'initiative' | 'map' | 'dice'
 
+export interface InitiativeEntry {
+  name: string
+  kind: string
+  down: boolean
+  active: boolean
+}
+
+/** The strip above whatever else is showing, with its own round */
+export interface InitiativeStrip {
+  round?: number
+  entries?: InitiativeEntry[]
+}
+
 export interface CastState {
   mode: CastMode
   payload: Record<string, unknown>
+  initiative?: InitiativeStrip
 }
 
 export interface CastStatus extends CastState {
@@ -79,6 +93,21 @@ export function useCast() {
 
   const clear = () => set({ mode: 'idle', payload: {} })
 
+  /**
+   * The initiative strip, set and cleared on its own.
+   *
+   * Its own call because it has its own lifetime: up when the fight starts,
+   * down when it ends, with everything cast in between happening underneath.
+   * Passing no entries takes it down.
+   */
+  async function setInitiative(entries: InitiativeEntry[], round = 1) {
+    const result = await api.put<CastStatus>(`${base()}/initiative`, { entries, round })
+    // Into the shared copy, or the switch that reads it keeps saying "off"
+    current.value = result
+    loadedFor.value = currentId.value
+    return result
+  }
+
   /** Is this entity the thing the table is looking at right now? */
   const isShowing = (entityId: string) => showingEntityId.value === entityId
 
@@ -106,7 +135,8 @@ export function useCast() {
     set,
     clear,
     isShowing,
-    recast
+    recast,
+    setInitiative
   }
 }
 

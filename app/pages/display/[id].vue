@@ -15,6 +15,9 @@ const token = typeof route.query.t === 'string' ? route.query.t : ''
 
 const { state, connected, failed } = useCastDisplay(campaignId, token)
 
+/** The order of turns, when a fight is running. Its own layer above the rest. */
+const strip = computed(() => state.value.initiative?.entries ?? [])
+
 /**
  * Fog travels with the cast payload rather than being read from the entity.
  *
@@ -111,7 +114,30 @@ useHead({ title: 'Display' })
 </script>
 
 <template>
-  <div class="display-root">
+  <div
+    class="display-root"
+    :class="strip.length > 0 && 'display-root--with-strip'"
+  >
+    <!-- The order of turns, above whatever else is showing. Its own layer, so
+         casting a map or a portrait mid-fight doesn't take it away. -->
+    <div
+      v-if="strip.length"
+      class="display-strip"
+    >
+      <span class="display-strip-round">Round {{ state.initiative?.round ?? 1 }}</span>
+      <span
+        v-for="(turn, index) in strip"
+        :key="`${turn.name}-${index}`"
+        class="display-strip-name"
+        :class="[
+          turn.active && 'display-strip-name--active',
+          turn.down && 'display-strip-name--down'
+        ]"
+      >
+        {{ turn.name }}
+      </span>
+    </div>
+
     <!-- Bad or rotated token -->
     <div
       v-if="failed || !token"
@@ -245,6 +271,12 @@ useHead({ title: 'Display' })
             ]"
             :style="{ left: `${piece.x}%`, top: `${piece.y}%` }"
           >
+            <img
+              v-if="piece.image_url"
+              :src="mediaUrl(piece.image_url)"
+              alt=""
+              class="display-token-face"
+            >
             <span class="display-token-label">{{ piece.label }}</span>
           </span>
 
@@ -478,6 +510,52 @@ useHead({ title: 'Display' })
 
 /* Tokens: bigger than a pin and read from across a room, since the table is
    looking at these to work out where everyone is standing */
+.display-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.5rem 1.4rem;
+  padding: 0.9rem 1.5rem;
+  background: rgb(0 0 0 / 78%);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.display-strip-round {
+  font-size: 0.95rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
+.display-strip-name {
+  font-size: 1.35rem;
+  opacity: 0.55;
+}
+
+/* Whose turn it is, readable from the far end of the table */
+.display-strip-name--active {
+  opacity: 1;
+  font-weight: 700;
+  color: rgb(255 160 80);
+}
+
+.display-strip-name--down {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+/* Room for the strip, so a full-height map isn't hidden underneath it */
+.display-root--with-strip {
+  padding-top: 4.5rem;
+}
+
 .display-token {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -489,6 +567,13 @@ useHead({ title: 'Display' })
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.display-token-face {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
 }
 
 .display-token-party {

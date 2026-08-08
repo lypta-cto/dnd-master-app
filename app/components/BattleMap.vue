@@ -26,6 +26,7 @@ const cast = useCast()
 const mediaUrl = useMediaUrl()
 
 const map = ref<EntityDetail | null>(null)
+
 const loading = ref(false)
 
 async function load() {
@@ -49,6 +50,37 @@ watch(() => props.mapId, load, { immediate: true })
 
 const fog = computed(() => (map.value ? readFog(map.value.data) : null))
 const cells = computed(() => (fog.value ? decodeCells(fog.value) : new Uint8Array()))
+
+/**
+ * A face on the token, where the combatant points at something with a picture.
+ *
+ * Two letters told you which goblin was which and nothing about who it was.
+ * Fetched once per entity and remembered, because a fight redraws constantly
+ * and this must not become a request per frame.
+ */
+const portraits = ref<Record<string, string>>({})
+
+async function loadPortraits() {
+  const ids = [...new Set(
+    props.combatants.map(c => c.entity_id).filter((id): id is string => !!id)
+  )].filter(id => !(id in portraits.value))
+
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const entity = await entities.read(id)
+      // Recorded either way: an empty string means "asked, hasn't got one",
+      // which stops it being asked again on every redraw.
+      portraits.value = { ...portraits.value, [id]: entity.image_url ?? '' }
+    } catch {
+      portraits.value = { ...portraits.value, [id]: '' }
+    }
+  }))
+}
+
+watch(() => props.combatants.map(c => c.entity_id).join(','), loadPortraits, { immediate: true })
+
+const portraitFor = (token: Combatant) =>
+  token.entity_id ? portraits.value[token.entity_id] || null : null
 
 /* --- Picking a map --------------------------------------------------------- */
 
@@ -147,7 +179,8 @@ async function castBattle() {
           y: c.y,
           label: c.name,
           kind: c.kind,
-          down: c.current_hp === 0
+          down: c.current_hp === 0,
+          image_url: portraitFor(c)
         }))
       }
     })
@@ -253,7 +286,16 @@ defineExpose({ castBattle })
           :title="token.name"
           @pointerdown="startDrag($event, token.id)"
         >
-          {{ token.name.slice(0, 2).toUpperCase() }}
+          <img
+            v-if="portraitFor(token)"
+            :src="mediaUrl(portraitFor(token)!)"
+            :alt="token.name"
+            class="size-full rounded-full object-cover"
+            draggable="false"
+          >
+          <template v-else>
+            {{ token.name.slice(0, 2).toUpperCase() }}
+          </template>
         </button>
       </div>
 
