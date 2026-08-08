@@ -363,6 +363,13 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           @changed="load"
         />
 
+        <EncounterRoster
+          v-if="entity.type === 'encounter'"
+          :key="`roster-${entity.id}`"
+          :entity="entity"
+          :can-edit="isDm"
+        />
+
         <MapViewer
           v-if="entity.type === 'map'"
           :key="`map-${entity.id}`"
