@@ -37,8 +37,8 @@ onMounted(async () => {
  * tiers is much smaller than the difference a good prompt makes.
  */
 const QUALITIES = [
-  { value: 'draft' as const, label: 'Draft', hint: 'about 1¢' },
-  { value: 'good' as const, label: 'Good', hint: 'about 4¢, sharper' }
+  { value: 'draft' as const, label: 'Draft', hint: 'about ¼¢' },
+  { value: 'good' as const, label: 'Good', hint: 'under 1¢, richer' }
 ]
 
 const illustrateMenu = computed(() =>
