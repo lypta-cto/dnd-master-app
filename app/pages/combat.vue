@@ -71,6 +71,35 @@ async function persist() {
   }
 }
 
+/* --- The battle map -------------------------------------------------------- */
+
+function chooseMap(mapId: string | null) {
+  state.value.map_id = mapId
+
+  // Taking the map away leaves every token's position pointing at nothing,
+  // and a stale coordinate would reappear the moment another map was chosen
+  if (!mapId) {
+    for (const combatant of state.value.combatants) {
+      combatant.x = null
+      combatant.y = null
+    }
+  }
+
+  queueSave()
+}
+
+function moveToken(id: string, point: { x: number, y: number }) {
+  const token = state.value.combatants.find(c => c.id === id)
+  if (!token) {
+    return
+  }
+  token.x = point.x
+  token.y = point.y
+  // No undo snapshot: dragging a token is a dozen updates a second, and
+  // filling the history with them would bury the moves worth undoing.
+  queueSave()
+}
+
 function queueSave() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(persist, 400)
@@ -610,6 +639,14 @@ function hpPercent(combatant: Combatant) {
           </li>
         </ul>
       </ContentCard>
+
+      <BattleMap
+        class="lg:col-span-2"
+        :combatants="state.combatants"
+        :map-id="state.map_id"
+        @chose="chooseMap"
+        @moved="moveToken"
+      />
 
       <!-- Roster -->
       <div class="space-y-4">

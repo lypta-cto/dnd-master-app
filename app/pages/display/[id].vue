@@ -233,6 +233,21 @@ useHead({ title: 'Display' })
             opaque
           />
 
+          <!-- Tokens carry a name and a side and nothing else: a monster's
+               remaining HP is the DM's business, not the table's -->
+          <span
+            v-for="(piece, index) in (state.payload.tokens as any[] ?? [])"
+            :key="`token-${index}`"
+            class="display-token"
+            :class="[
+              piece.kind === 'character' ? 'display-token-party' : 'display-token-foe',
+              piece.down && 'display-token-down'
+            ]"
+            :style="{ left: `${piece.x}%`, top: `${piece.y}%` }"
+          >
+            <span class="display-token-label">{{ piece.label }}</span>
+          </span>
+
           <span
             v-for="(pin, index) in (state.payload.pins as any[] ?? [])"
             :key="index"
@@ -458,6 +473,47 @@ useHead({ title: 'Display' })
   padding: 0.15em 0.7em;
   border-radius: 999px;
   background: rgb(0 0 0 / 65%);
+  white-space: nowrap;
+}
+
+/* Tokens: bigger than a pin and read from across a room, since the table is
+   looking at these to work out where everyone is standing */
+.display-token {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  border: 3px solid rgb(255 255 255 / 85%);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 65%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.display-token-party {
+  background: rgb(255 140 60);
+}
+
+.display-token-foe {
+  background: rgb(200 50 50);
+}
+
+/* Down, not gone: the body is still on the board and still in the way */
+.display-token-down {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+.display-token-label {
+  position: absolute;
+  top: 100%;
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 70%);
   white-space: nowrap;
 }
 
