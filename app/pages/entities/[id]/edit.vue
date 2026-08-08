@@ -43,7 +43,10 @@ async function onSaved(saved: EntityDetail) {
       title="Not found"
     />
 
-    <ContentCard v-else>
+    <ContentCard
+      v-else
+      class="max-w-5xl"
+    >
       <EntityForm
         :entity="entity"
         :type="entity.type"

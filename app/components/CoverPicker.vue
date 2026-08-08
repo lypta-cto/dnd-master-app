@@ -67,9 +67,10 @@ const hint = computed(() => props.label ?? (props.hero ? 'Drop the map here' : '
       type="button"
       class="group relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-dashed transition-colors"
       :class="[
-        // Capped, because a square slot in a side column grows with the
-        // window until a thumbnail is the biggest thing on the page
-        hero ? 'aspect-[16/9]' : 'aspect-square max-w-56',
+        // Both capped: an empty drop zone that fills the screen is a lot of
+        // nothing, and a square slot in a side column otherwise grows with
+        // the window until a thumbnail is the biggest thing on the page
+        hero ? 'aspect-[16/9] max-h-72' : 'aspect-square max-w-48',
         dragging ? 'border-primary bg-primary/5' : 'border-accented hover:border-primary/60'
       ]"
       @click="input?.click()"

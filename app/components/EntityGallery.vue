@@ -108,7 +108,12 @@ async function onFocusPicked(point: { x: number, y: number }) {
     data: { ...props.entity.data, cover_focus: point }
   })
   emit('focusChanged', point)
-  toast.add({ title: 'Crop focus saved', icon: 'i-lucide-focus', color: 'success' })
+  toast.add({
+    title: 'Thumbnail set',
+    description: 'That point stays in frame wherever this is cropped.',
+    icon: 'i-lucide-crop',
+    color: 'success'
+  })
 }
 
 async function load() {
@@ -274,15 +279,20 @@ async function removeOne(image: EntityImage) {
     @drop.prevent="onDrop"
   >
     <template #actions>
-      <UButton
-        v-if="entity.image_url"
-        label="Crop focus"
-        icon="i-lucide-focus"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        @click="pickFocus"
-      />
+      <!-- "Crop focus" meant nothing to anyone who hadn't written it. What it
+           does is decide which part of the picture survives being squared off
+           into a thumbnail — usually a face, rather than the sky above it. -->
+      <UTooltip text="Lists crop this picture to a square. Pick what stays in frame.">
+        <UButton
+          v-if="entity.image_url"
+          label="Thumbnail"
+          icon="i-lucide-crop"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          @click="pickFocus"
+        />
+      </UTooltip>
       <UDropdownMenu
         v-if="aiImages"
         :items="illustrateMenu"

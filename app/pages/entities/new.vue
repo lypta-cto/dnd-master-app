@@ -51,7 +51,7 @@ async function onSaved(entity: EntityDetail) {
       />
     </template>
 
-    <ContentCard>
+    <ContentCard class="max-w-5xl">
       <!-- Re-key on type so switching resets defaults cleanly -->
       <EntityForm
         :key="type"

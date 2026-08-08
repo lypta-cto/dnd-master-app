@@ -32,13 +32,7 @@ const sort = ref<EntitySort>(
     : 'name'
 )
 
-// Remembered across types and sessions: it's a preference about eyesight and
-// screen size, not about the list you happen to be looking at
-const layout = useCookie<'grid' | 'list'>('entity-layout', {
-  default: () => 'grid',
-  sameSite: 'lax',
-  maxAge: 60 * 60 * 24 * 365
-})
+const layout = useEntityLayout(type)
 
 const sortMeta = computed(() => ENTITY_SORTS.find(s => s.value === sort.value)!)
 const sortMenu = computed(() =>
@@ -314,9 +308,12 @@ watch([type, () => current.value?.id], () => {
     />
 
     <template v-else>
-      <!-- Only worth the row once there's enough to hunt through -->
+      <!-- Shown whenever there's anything at all. It used to appear only past
+           a handful of entries, which was fine when cards-or-rows was one
+           global setting — now that each type remembers its own, hiding the
+           row would leave a short list stuck in whatever it defaulted to. -->
       <div
-        v-if="pageData && (pageData.total > 8 || applied)"
+        v-if="pageData?.items.length || applied"
         class="flex flex-wrap items-center gap-2"
       >
         <UInput
@@ -353,8 +350,11 @@ watch([type, () => current.value?.id], () => {
         </UDropdownMenu>
 
         <div class="ml-auto flex items-center gap-2">
+          <!-- The row now shows while a search is running, which can be
+               before the first page has landed — so the count has to tolerate
+               not having one yet -->
           <p
-            v-if="applied"
+            v-if="applied && pageData"
             class="text-sm tabular-nums text-muted"
           >
             {{ pageData.total }} {{ pageData.total === 1 ? 'match' : 'matches' }}

@@ -189,8 +189,15 @@ export interface TypeField {
   key: string
   label: string
   placeholder?: string
-  /** When present, renders a select instead of a free input */
+  /** A closed set — renders a select, and nothing else is allowed */
   options?: string[]
+  /**
+   * An open set — renders a searchable box that offers these and still takes
+   * anything typed. Most of these fields have a familiar answer and an
+   * occasional made-up one, and a plain text box made you spell "tiefling"
+   * from memory every time.
+   */
+  suggestions?: string[]
   /** A number or a word — give it a narrow box, not half the screen */
   short?: boolean
   /** A sentence — give it a textarea */
@@ -242,15 +249,34 @@ export const FAMILY_ART: Record<EntityFamily, 'hero' | 'portrait' | 'quiet'> = {
  * changing one here needs no migration and no API change. Keep keys stable:
  * they are the JSON keys on the wire.
  */
+/* Common answers, offered but never enforced — a campaign invents its own. */
+
+const ANCESTRIES = [
+  'Human', 'Elf', 'Half-elf', 'Dwarf', 'Halfling', 'Gnome', 'Half-orc', 'Dragonborn',
+  'Tiefling', 'Aasimar', 'Goliath', 'Orc', 'Firbolg', 'Tabaxi', 'Genasi', 'Goblin',
+  'Kobold', 'Lizardfolk', 'Changeling', 'Warforged'
+]
+
+const CLASSES = [
+  'Artificer', 'Barbarian', 'Bard', 'Cleric', 'Druid', 'Fighter', 'Monk', 'Paladin',
+  'Ranger', 'Rogue', 'Sorcerer', 'Warlock', 'Wizard'
+]
+
+const OCCUPATIONS = [
+  'Innkeeper', 'Blacksmith', 'Merchant', 'Guard', 'Priest', 'Farmer', 'Hunter',
+  'Sailor', 'Soldier', 'Noble', 'Scholar', 'Healer', 'Miller', 'Bandit', 'Spy',
+  'Beggar', 'Gravedigger', 'Herbalist', 'Bartender', 'Mayor'
+]
+
 export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   character: [
-    { key: 'class', label: 'Class & subclass', placeholder: 'Paladin (Devotion)' },
-    { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…' },
+    { key: 'class', label: 'Class', placeholder: 'Paladin', suggestions: CLASSES },
+    { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…', suggestions: ANCESTRIES },
     { key: 'passive_perception', label: 'Passive perception', placeholder: '13', short: true }
   ],
   npc: [
-    { key: 'race', label: 'Race', placeholder: 'Human, elf, vampire…' },
-    { key: 'occupation', label: 'Occupation', placeholder: 'Innkeeper, count, spy…' },
+    { key: 'race', label: 'Race', placeholder: 'Human, elf, vampire…', suggestions: ANCESTRIES },
+    { key: 'occupation', label: 'Occupation', placeholder: 'Innkeeper, count, spy…', suggestions: OCCUPATIONS },
     { key: 'status', label: 'Status', options: ['alive', 'dead', 'missing', 'unknown'], short: true },
     { key: 'voice', label: 'Voice & manner', placeholder: 'How to play them: accent, tics, mood', long: true }
   ],

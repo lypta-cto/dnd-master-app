@@ -69,7 +69,8 @@ function onImageClick(event: MouseEvent) {
           v-if="pickFocus"
           class="absolute inset-x-0 top-5 text-center text-sm font-medium text-white/80"
         >
-          Click where the crop should centre — thumbnails will keep that part in frame.
+          Click the part that matters — a face, not the sky above it. Wherever this
+          picture is squared off into a thumbnail, that point stays in frame.
         </p>
         <p
           v-else-if="caption"

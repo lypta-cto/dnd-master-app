@@ -30,6 +30,17 @@ const data = defineModel<Record<string, unknown>>({ required: true })
         class="w-full capitalize"
         @update:model-value="value => (data[field.key] = value)"
       />
+      <!-- Open set: type to filter, and anything not on the list is kept -->
+      <UInputMenu
+        v-else-if="field.suggestions"
+        :model-value="(data[field.key] as string | undefined) ?? ''"
+        :items="field.suggestions"
+        :placeholder="field.placeholder"
+        create-item
+        class="w-full"
+        @update:model-value="value => (data[field.key] = value)"
+        @create="value => (data[field.key] = value)"
+      />
       <UTextarea
         v-else-if="field.long"
         :model-value="(data[field.key] as string | undefined) ?? ''"

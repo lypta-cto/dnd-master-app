@@ -246,6 +246,10 @@ async function submit() {
 </script>
 
 <template>
+  <!-- The width cap lives on the card that holds this, so the card and the
+       form end together. On a wide monitor this used to stretch to the full
+       window and give a name field a thousand pixels, which is both harder to
+       scan and slower to fill in than a narrow one. -->
   <form
     class="space-y-6"
     @submit.prevent="submit"
