@@ -307,6 +307,16 @@ export function useEntities() {
 
   const remove = (id: string) => api.del(`${base()}/entities/${id}`)
 
+  /**
+   * Uncovering a map is its own write.
+   *
+   * Not folded into `update`, because a brush stroke sends the whole mask and
+   * the entity PATCH would carry name, body and every type field along with
+   * it — overwriting whatever someone else had just typed on another screen.
+   */
+  const setFog = (id: string, fog: FogMask | null) =>
+    api.put<EntityDetail>(`${base()}/entities/${id}/fog`, { fog })
+
   const link = (id: string, to_id: string, relation: LinkRelation) =>
     api.post<EntityDetail>(`${base()}/entities/${id}/links`, { to_id, relation })
 
@@ -347,6 +357,7 @@ export function useEntities() {
     create,
     update,
     remove,
+    setFog,
     link,
     unlink,
     search,

@@ -15,6 +15,19 @@ const token = typeof route.query.t === 'string' ? route.query.t : ''
 
 const { state, connected, failed } = useCastDisplay(campaignId, token)
 
+/**
+ * Fog travels with the cast payload rather than being read from the entity.
+ *
+ * This screen has a display token, not an account — it can't fetch the map it
+ * is showing. And the fog has to arrive with the picture anyway: a TV that
+ * showed the whole map for the half second before a second request landed
+ * would give away exactly what the fog exists to keep.
+ */
+const castFog = computed(() => {
+  const fog = readFog(state.value.payload as Record<string, unknown>)
+  return fog ? { ...fog, cells: decodeCells(fog) } : null
+})
+
 /*
  * Slideshow rotation happens here, on the display, not on the server: the DM
  * casts the set once and every connected screen paces itself. A new cast (any
@@ -210,6 +223,16 @@ useHead({ title: 'Display' })
             alt=""
             class="display-map-img"
           >
+
+          <!-- Opaque here: this is the screen the party is looking at -->
+          <MapFog
+            v-if="castFog"
+            :cells="castFog.cells"
+            :w="castFog.w"
+            :h="castFog.h"
+            opaque
+          />
+
           <span
             v-for="(pin, index) in (state.payload.pins as any[] ?? [])"
             :key="index"
