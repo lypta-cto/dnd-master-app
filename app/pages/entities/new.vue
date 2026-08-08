@@ -16,6 +16,12 @@ if (!isDm.value) {
 
 const meta = computed(() => entityTypeMeta(type.value))
 
+const typeItems = ENTITY_TYPES.map(option => ({
+  value: option.value,
+  label: option.label,
+  icon: option.icon
+}))
+
 async function onSaved(entity: EntityDetail) {
   toast.add({ title: `“${entity.name}” created`, icon: meta.value.icon, color: 'success' })
   await navigateTo(`/entities/${entity.id}`)
@@ -31,21 +37,21 @@ async function onSaved(entity: EntityDetail) {
       { label: 'New' }
     ]"
   >
-    <ContentCard>
-      <div class="mb-5 flex flex-wrap gap-1.5">
-        <UButton
-          v-for="option in (isDm ? ENTITY_TYPES : ENTITY_TYPES.filter(t => t.value === 'character'))"
-          :key="option.value"
-          :label="option.label"
-          :icon="option.icon"
-          size="sm"
-          class="rounded-lg"
-          :color="type === option.value ? 'primary' : 'neutral'"
-          :variant="type === option.value ? 'solid' : 'outline'"
-          @click="type = option.value"
-        />
-      </div>
+    <!-- The type is already in the title and the breadcrumb; thirteen buttons
+         saying it again were the first thing the eye landed on and the last
+         thing that mattered. A picker for the rare case of changing your mind. -->
+    <template #actions>
+      <USelectMenu
+        v-if="isDm"
+        v-model="type"
+        :items="typeItems"
+        value-key="value"
+        :icon="meta.icon"
+        class="w-44"
+      />
+    </template>
 
+    <ContentCard>
       <!-- Re-key on type so switching resets defaults cleanly -->
       <EntityForm
         :key="type"

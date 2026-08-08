@@ -191,6 +191,50 @@ export interface TypeField {
   placeholder?: string
   /** When present, renders a select instead of a free input */
   options?: string[]
+  /** A number or a word — give it a narrow box, not half the screen */
+  short?: boolean
+  /** A sentence — give it a textarea */
+  long?: boolean
+}
+
+/**
+ * What kind of thing this is to the person filling the form in.
+ *
+ * The types were always one spine with different fields; the form treated
+ * that as one shape too, and it fitted none of them. A monster is read for
+ * its numbers, a map *is* its picture, and a scene is its purpose — so the
+ * families differ in what gets the top of the page and how big the art is.
+ */
+export type EntityFamily = 'being' | 'place' | 'beat' | 'thing'
+
+export const ENTITY_FAMILY: Record<EntityType, EntityFamily> = {
+  npc: 'being',
+  character: 'being',
+  monster: 'being',
+  location: 'place',
+  map: 'place',
+  scene: 'beat',
+  encounter: 'beat',
+  clue: 'beat',
+  quest: 'beat',
+  session: 'beat',
+  item: 'thing',
+  faction: 'thing',
+  note: 'thing'
+}
+
+/**
+ * How much room the picture gets.
+ *
+ * A map with no image is nothing at all, so it leads. A face is worth a
+ * thumbnail. A scene almost never has art and shouldn't be asked for it
+ * before the DM has written what the scene is for.
+ */
+export const FAMILY_ART: Record<EntityFamily, 'hero' | 'portrait' | 'quiet'> = {
+  place: 'hero',
+  being: 'portrait',
+  thing: 'portrait',
+  beat: 'quiet'
 }
 
 /**
@@ -202,13 +246,13 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   character: [
     { key: 'class', label: 'Class & subclass', placeholder: 'Paladin (Devotion)' },
     { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…' },
-    { key: 'passive_perception', label: 'Passive perception', placeholder: '13' }
+    { key: 'passive_perception', label: 'Passive perception', placeholder: '13', short: true }
   ],
   npc: [
     { key: 'race', label: 'Race', placeholder: 'Human, elf, vampire…' },
     { key: 'occupation', label: 'Occupation', placeholder: 'Innkeeper, count, spy…' },
-    { key: 'status', label: 'Status', options: ['alive', 'dead', 'missing', 'unknown'] },
-    { key: 'voice', label: 'Voice & manner', placeholder: 'How to play them: accent, tics, mood' }
+    { key: 'status', label: 'Status', options: ['alive', 'dead', 'missing', 'unknown'], short: true },
+    { key: 'voice', label: 'Voice & manner', placeholder: 'How to play them: accent, tics, mood', long: true }
   ],
   location: [
     // Region first, because it's the outermost thing you pick when building a
@@ -218,54 +262,54 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     // the same thing now, and better: it links, it nests, and it draws a
     // breadcrumb. Two ways to record where something is would have drifted
     // apart the first time someone used one and not the other.
-    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'] }
+    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'], short: true }
   ],
   item: [
-    { key: 'rarity', label: 'Rarity', options: ['common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'] },
-    { key: 'attunement', label: 'Attunement', options: ['none', 'required'] }
+    { key: 'rarity', label: 'Rarity', options: ['common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'], short: true },
+    { key: 'attunement', label: 'Attunement', options: ['none', 'required'], short: true }
   ],
   faction: [
-    { key: 'goal', label: 'Goal', placeholder: 'What they want' },
+    { key: 'goal', label: 'Goal', placeholder: 'What they want', long: true },
     { key: 'leader', label: 'Leader', placeholder: 'Who runs it — [[link]] them in the body too' }
   ],
   note: [],
   session: [
-    { key: 'number', label: 'Session #', placeholder: '12' },
-    { key: 'date', label: 'Date', placeholder: '2026-08-06' },
-    { key: 'status', label: 'Status', options: ['planned', 'played'] }
+    { key: 'number', label: 'Session #', placeholder: '12', short: true },
+    { key: 'date', label: 'Date', placeholder: '2026-08-06', short: true },
+    { key: 'status', label: 'Status', options: ['planned', 'played'], short: true }
   ],
   map: [],
   monster: [
     { key: 'kind', label: 'Kind', options: ['aberration', 'beast', 'celestial', 'construct', 'dragon', 'elemental', 'fey', 'fiend', 'giant', 'humanoid', 'monstrosity', 'ooze', 'plant', 'undead'] },
-    { key: 'cr', label: 'CR', placeholder: '1/4, 5, 13…' },
-    { key: 'ac', label: 'AC', placeholder: '15' },
-    { key: 'hp', label: 'HP', placeholder: '45' },
+    { key: 'cr', label: 'CR', placeholder: '1/4, 5, 13…', short: true },
+    { key: 'ac', label: 'AC', placeholder: '15', short: true },
+    { key: 'hp', label: 'HP', placeholder: '45', short: true },
     { key: 'speed', label: 'Speed', placeholder: '30 ft., fly 60 ft.' },
     { key: 'abilities', label: 'STR/DEX/CON/INT/WIS/CHA', placeholder: '16/12/14/8/10/6' }
   ],
   quest: [
-    { key: 'status', label: 'Status', options: ['active', 'completed', 'failed', 'paused'] },
+    { key: 'status', label: 'Status', options: ['active', 'completed', 'failed', 'paused'], short: true },
     { key: 'giver', label: 'Quest giver', placeholder: 'Who asked — [[link]] them in the body too' },
     { key: 'reward', label: 'Reward', placeholder: 'What is promised' }
   ],
   scene: [
-    { key: 'kind', label: 'Kind', options: ['roleplay', 'investigation', 'combat', 'travel', 'downtime'] },
-    { key: 'status', label: 'Status', options: ['planned', 'played', 'skipped'] },
-    { key: 'purpose', label: 'Purpose', placeholder: 'Why this scene exists — what it moves' },
-    { key: 'learn', label: 'Players learn', placeholder: 'The one thing they should leave knowing' }
+    { key: 'kind', label: 'Kind', options: ['roleplay', 'investigation', 'combat', 'travel', 'downtime'], short: true },
+    { key: 'status', label: 'Status', options: ['planned', 'played', 'skipped'], short: true },
+    { key: 'purpose', label: 'Purpose', placeholder: 'Why this scene exists — what it moves', long: true },
+    { key: 'learn', label: 'Players learn', placeholder: 'The one thing they should leave knowing', long: true }
   ],
   encounter: [
-    { key: 'kind', label: 'Kind', options: ['combat', 'social', 'puzzle', 'chase', 'skill challenge'] },
-    { key: 'difficulty', label: 'Difficulty', options: ['trivial', 'easy', 'medium', 'hard', 'deadly'] },
-    { key: 'objective', label: 'Objective', placeholder: 'Survive five rounds — better than "kill them all"' },
+    { key: 'kind', label: 'Kind', options: ['combat', 'social', 'puzzle', 'chase', 'skill challenge'], short: true },
+    { key: 'difficulty', label: 'Difficulty', options: ['trivial', 'easy', 'medium', 'hard', 'deadly'], short: true },
+    { key: 'objective', label: 'Objective', placeholder: 'Survive five rounds — better than "kill them all"', long: true },
     { key: 'trigger', label: 'Trigger', placeholder: 'What sets it off' },
     { key: 'reward', label: 'Reward', placeholder: 'What it pays out' }
   ],
   clue: [
-    { key: 'points_to', label: 'Points toward', placeholder: 'The conclusion it supports — same wording across clues' },
+    { key: 'points_to', label: 'Points toward', placeholder: 'The conclusion it supports — same wording across clues', long: true },
     { key: 'found_at', label: 'Found at', placeholder: 'Where, and how they get it' },
-    { key: 'weight', label: 'Weight', options: ['essential', 'supporting', 'flavour'] },
-    { key: 'difficulty', label: 'Difficulty', placeholder: 'DC 13 Investigation, or "ask anyone in the inn"' }
+    { key: 'weight', label: 'Weight', options: ['essential', 'supporting', 'flavour'], short: true },
+    { key: 'difficulty', label: 'Difficulty', placeholder: 'DC 13 Investigation, or "ask anyone in the inn"', short: true }
   ]
 }
 
