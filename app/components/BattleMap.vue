@@ -13,6 +13,14 @@
 const props = defineProps<{
   combatants: Combatant[]
   mapId: string | null | undefined
+  /**
+   * Prepping rather than running.
+   *
+   * The same board, minus the button that puts it on the wall — casting an
+   * ambush while you are still deciding where the goblins hide is the one
+   * mistake this screen could make on the DM's behalf.
+   */
+  prep?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -207,7 +215,9 @@ defineExpose({ castBattle })
     icon="i-lucide-map"
     :description="map
       ? 'Drag tokens. Click one below, then the map, to put it on the board.'
-      : 'Pick a map and the fight can happen on it.'"
+      : prep
+        ? 'Pick a map now and set where everyone starts.'
+        : 'Pick a map and the fight can happen on it.'"
     flush
   >
     <template #actions>
@@ -220,7 +230,7 @@ defineExpose({ castBattle })
         @click="openPicker"
       />
       <UButton
-        v-if="map"
+        v-if="map && !prep"
         label="Cast"
         icon="i-lucide-cast"
         size="sm"

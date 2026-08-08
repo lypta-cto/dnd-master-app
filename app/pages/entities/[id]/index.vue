@@ -363,9 +363,9 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           @changed="load"
         />
 
-        <EncounterRoster
+        <EncounterPrep
           v-if="entity.type === 'encounter'"
-          :key="`roster-${entity.id}`"
+          :key="`prep-${entity.id}`"
           :entity="entity"
           :can-edit="isDm"
         />
