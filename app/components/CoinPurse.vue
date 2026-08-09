@@ -20,6 +20,17 @@ const open = ref(false)
 const busy = ref(false)
 const amount = ref(10)
 
+/**
+ * What OpenAI says the account actually spent, when an admin key is set.
+ *
+ * Our own ledger adds up what each generation reported costing; this is the
+ * same question asked of the provider. Two things it deliberately isn't, and
+ * both are said on screen: it covers the whole account rather than this
+ * campaign, and it is spending rather than the balance left — OpenAI publishes
+ * no endpoint for the balance at all.
+ */
+const billed = ref<Billed | null>(null)
+
 async function load() {
   if (!isDm.value) {
     return
@@ -28,6 +39,15 @@ async function load() {
     purse.value = await ai.purse()
   } catch {
     purse.value = null // no campaign, or not the DM — nothing worth shouting about
+    return
+  }
+
+  if (purse.value?.can_reconcile) {
+    try {
+      billed.value = await ai.billed()
+    } catch {
+      billed.value = null // billing being unreachable isn't worth an alarm here
+    }
   }
 }
 
@@ -155,6 +175,21 @@ async function addFunds() {
               {{ entry.coins > 0 ? '+' : '' }}{{ Math.round(entry.coins).toLocaleString() }}
             </span>
           </div>
+        </div>
+
+        <div
+          v-if="billed"
+          class="space-y-0.5 border-t border-default pt-2"
+        >
+          <div class="flex items-baseline justify-between gap-3 text-sm">
+            <span class="text-muted">OpenAI billed</span>
+            <span class="tabular-nums text-highlighted">${{ billed.usd.toFixed(2) }}</span>
+          </div>
+          <p class="text-xs text-dimmed">
+            The whole account over {{ billed.days }} days, not just this
+            campaign — and what was spent, not what's left. OpenAI publishes no
+            balance to read.
+          </p>
         </div>
 
         <div class="space-y-1.5 border-t border-default pt-2">

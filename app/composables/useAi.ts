@@ -14,6 +14,12 @@ export interface CoinEntry {
   created_at: string
 }
 
+export interface Billed {
+  usd: number
+  currency: string
+  days: number
+}
+
 export interface Purse {
   balance: number
   added: number
@@ -21,6 +27,8 @@ export interface Purse {
   spent_on_images: number
   spent_usd: number
   coins_per_dollar: number
+  /** True when an admin key is set and the real bill can be read */
+  can_reconcile: boolean
   entries: CoinEntry[]
 }
 
@@ -80,5 +88,13 @@ export function useAi() {
   /** Recording money already put on the provider account — nothing is charged */
   const topUp = (usd: number) => api.post<Purse>(`${base()}/purse/topup`, { usd })
 
-  return { status, draft, illustrate, purse, topUp }
+  /**
+   * What OpenAI says the account actually spent, for comparison.
+   *
+   * The whole organisation rather than this campaign, and spending rather than
+   * the balance left — OpenAI publishes no endpoint for the balance at all.
+   */
+  const billed = (days = 30) => api.get<Billed>(`${base()}/purse/billed`, { query: { days } })
+
+  return { status, draft, illustrate, purse, topUp, billed }
 }
