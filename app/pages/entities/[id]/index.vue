@@ -106,6 +106,13 @@ async function makeVariant() {
   duplicating.value = true
 
   try {
+    const data = JSON.parse(JSON.stringify(entity.value.data))
+    // A variant is by definition the DM's own working creature — it goes
+    // straight into the favourites the pickers surface first
+    if (entity.value.type === 'monster') {
+      data.favorite = true
+    }
+
     const created = await entities.create({
       type: entity.value.type,
       name: `${entity.value.name} (variant)`,
@@ -113,13 +120,41 @@ async function makeVariant() {
       body: entity.value.body,
       tags: [...entity.value.tags],
       visibility: entity.value.visibility,
-      data: JSON.parse(JSON.stringify(entity.value.data))
+      data
     })
     await navigateTo(`/entities/${created.id}/edit`)
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
     duplicating.value = false
+  }
+}
+
+/* --- Favourites --------------------------------------------------------------
+ * An imported bestiary is hundreds of rows; the dozen the campaign actually
+ * uses get a star, and search puts them first everywhere monsters are picked.
+ */
+const isFavourite = computed(() => entity.value?.data.favorite === true)
+const starring = ref(false)
+
+async function toggleFavourite() {
+  if (!entity.value) {
+    return
+  }
+  starring.value = true
+
+  try {
+    const data: Record<string, unknown> = { ...entity.value.data }
+    if (isFavourite.value) {
+      delete data.favorite
+    } else {
+      data.favorite = true
+    }
+    entity.value = { ...entity.value, ...(await entities.update(entity.value.id, { data })) }
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    starring.value = false
   }
 }
 
@@ -257,6 +292,20 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           class="rounded-xl"
           @click="castThis"
         />
+        <UTooltip
+          v-if="canWrite && entity.type === 'monster'"
+          :text="isFavourite ? 'Out of the favourites' : 'A favourite — first in every monster search'"
+        >
+          <UButton
+            :icon="isFavourite ? 'i-lucide-star' : 'i-lucide-star-off'"
+            :color="isFavourite ? 'warning' : 'neutral'"
+            :variant="isFavourite ? 'soft' : 'outline'"
+            class="rounded-xl"
+            :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"
+            :loading="starring"
+            @click="toggleFavourite"
+          />
+        </UTooltip>
         <UButton
           v-if="canWrite"
           label="Variant"

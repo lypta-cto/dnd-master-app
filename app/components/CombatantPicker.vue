@@ -36,13 +36,27 @@ const customName = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
+/** Starred monsters are the DM's working set — they surface first */
+const isFavourite = (monster: EntitySummary) => monster.data.favorite === true
+
+/**
+ * Two asks, favourites first. One page sorted client-side isn't enough once
+ * the bestiary holds hundreds: the starred Owlbear lives on page four of an
+ * alphabet and would never surface. So favourites are fetched as their own
+ * page and the rest fills in behind them.
+ */
 async function search() {
-  const page = await entities.list({
-    type: 'monster',
-    q: query.value.trim() || undefined,
-    page_size: 8
-  })
-  results.value = page.items
+  const q = query.value.trim() || undefined
+  const [starred, rest] = await Promise.all([
+    entities.list({ type: 'monster', q, favorite: true, page_size: 8 }),
+    entities.list({ type: 'monster', q, page_size: 8 })
+  ])
+
+  const seen = new Set(starred.items.map(item => item.id))
+  results.value = [
+    ...starred.items,
+    ...rest.items.filter(item => !seen.has(item.id))
+  ].slice(0, 10)
 }
 
 watch(query, () => {
@@ -172,6 +186,11 @@ function addCustom() {
                 size="sm"
               />
               <span class="min-w-0 flex-1 truncate">{{ hit.name }}</span>
+              <UIcon
+                v-if="isFavourite(hit)"
+                name="i-lucide-star"
+                class="size-3.5 shrink-0 text-amber-400"
+              />
               <span
                 v-if="hit.data.cr"
                 class="shrink-0 text-xs text-dimmed"

@@ -7,7 +7,7 @@
  * you guessing whether the party was still staring at a map. This follows you,
  * takes you back to whatever is up, and stops it without going looking.
  */
-const { isDm } = useCampaigns()
+const { isDm, current, detail } = useCampaigns()
 const cast = useCast()
 const toast = useToast()
 
@@ -21,6 +21,38 @@ onMounted(() => {
     cast.status().catch(() => {})
   }
 })
+
+/**
+ * The same link the TV is on, for the DM's own second tab.
+ *
+ * "What is the table actually seeing right now" shouldn't require walking to
+ * the television — one click opens the display view exactly as the party has
+ * it, fog and all. The token is fetched once per campaign and quietly: a
+ * missing token just means no eye button, not an error.
+ */
+const displayToken = ref<string | null>(null)
+
+watch(
+  () => (isDm.value ? current.value?.id : null),
+  async (id) => {
+    displayToken.value = null
+    if (!id) {
+      return
+    }
+    try {
+      displayToken.value = (await detail(id)).display_token
+    } catch {
+      // The chip works fine without the extra button
+    }
+  },
+  { immediate: true }
+)
+
+const displayUrl = computed(() =>
+  current.value && displayToken.value
+    ? `/display/${current.value.id}?t=${displayToken.value}`
+    : null
+)
 
 /** Back to whatever put it there, so the fix is one click from the alert */
 const target = computed(() => {
@@ -65,6 +97,34 @@ async function stop() {
       <span class="hidden sm:inline">On the table:</span>
       <span class="max-w-32 truncate">{{ showing.payload.caption || showingLabel }}</span>
     </NuxtLink>
+
+    <!-- The control room, one click away from anywhere -->
+    <UTooltip text="Open the cast screen controls">
+      <UButton
+        icon="i-lucide-sliders-horizontal"
+        color="primary"
+        variant="ghost"
+        size="xs"
+        aria-label="Cast controls"
+        to="/cast"
+      />
+    </UTooltip>
+
+    <!-- Exactly what the party sees, in a tab of your own -->
+    <UTooltip
+      v-if="displayUrl"
+      text="See what the table sees, in a new tab"
+    >
+      <UButton
+        icon="i-lucide-eye"
+        color="primary"
+        variant="ghost"
+        size="xs"
+        aria-label="Open the table's view in a new tab"
+        :to="displayUrl"
+        target="_blank"
+      />
+    </UTooltip>
 
     <UButton
       icon="i-lucide-x"

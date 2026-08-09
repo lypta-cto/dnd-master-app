@@ -110,6 +110,41 @@ const csvResults = computed(() => {
   return hits.slice(0, 12)
 })
 
+/**
+ * The whole file at once — the "campaign bestiary" move. The server skips
+ * names already present, so pressing it twice doesn't double anything;
+ * favourites are how the working set is picked out of the pile afterwards.
+ */
+const importingAll = ref(false)
+
+async function importAll() {
+  importingAll.value = true
+  try {
+    const result = await entities.bulkCreate(
+      csvMonsters.value.map(monster => ({
+        type: 'monster' as const,
+        name: monster.name,
+        summary: `${monster.size} ${monster.kind}, CR ${monster.cr}${monster.source ? ` — from ${monster.source}` : ''}.`.replace(/\s+/g, ' '),
+        body: monster.body ?? null,
+        data: monster.data
+      }))
+    )
+    emit('imported', '')
+    toast.add({
+      title: `${result.created} monsters imported`,
+      description: result.skipped
+        ? `${result.skipped} already in the campaign, left alone.`
+        : undefined,
+      icon: 'i-lucide-library-big',
+      color: 'success'
+    })
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    importingAll.value = false
+  }
+}
+
 const results = computed(() => (source.value === 'srd' ? srdResults.value : csvResults.value))
 
 /* --- Importing --------------------------------------------------------------- */
@@ -225,6 +260,17 @@ async function importMonster(monster: SrdMonster, customise = false) {
                 @change="onFile"
               >
             </label>
+            <UButton
+              v-if="source === 'csv'"
+              :label="`Import all ${csvMonsters.length}`"
+              icon="i-lucide-library-big"
+              size="xs"
+              color="neutral"
+              variant="outline"
+              class="shrink-0"
+              :loading="importingAll"
+              @click="importAll"
+            />
           </div>
 
           <div

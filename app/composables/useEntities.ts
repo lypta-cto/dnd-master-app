@@ -381,6 +381,8 @@ export function useEntities() {
     type?: EntityType
     tag?: string
     q?: string
+    /** Only the starred working set — the dozen out of the imported hundreds */
+    favorite?: boolean
     sort?: EntitySort
     page?: number
     page_size?: number
@@ -390,6 +392,15 @@ export function useEntities() {
 
   const create = (payload: EntityWrite & { type: EntityType }) =>
     api.post<EntityDetail>(`${base()}/entities`, payload)
+
+  /**
+   * A whole bestiary in one request. Same names already in the campaign are
+   * skipped server-side, so importing the same file twice adds nothing.
+   */
+  const bulkCreate = (items: Array<EntityWrite & { type: EntityType }>) =>
+    api.post<{ created: number, skipped: number }>(`${base()}/entities/bulk`, {
+      entities: items
+    })
 
   const update = (id: string, payload: EntityWrite) =>
     api.patch<EntityDetail>(`${base()}/entities/${id}`, payload)
@@ -444,6 +455,7 @@ export function useEntities() {
     list,
     read,
     create,
+    bulkCreate,
     update,
     remove,
     setFog,

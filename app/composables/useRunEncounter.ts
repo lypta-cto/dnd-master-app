@@ -38,21 +38,30 @@ export function useRunEncounter() {
       = (encounter.data.placements as Record<string, { x: number, y: number }>) ?? {}
 
     // The party comes along: an initiative order without them is half a fight,
-    // and the DM would only add them by hand a moment later.
+    // and the DM would only add them by hand a moment later. Anyone the
+    // encounter explicitly excludes — captured, elsewhere, sitting this one
+    // out — stays behind.
+    const excluded = new Set(
+      Array.isArray(encounter.data.excluded_party)
+        ? (encounter.data.excluded_party as string[])
+        : []
+    )
     const party = await entities.list({ type: 'character', page_size: 50 })
 
-    const combatants: Combatant[] = party.items.map(character => ({
-      id: lineId(),
-      name: character.name,
-      kind: 'character' as const,
-      entity_id: character.id,
-      initiative: 0,
-      max_hp: Number(character.data.max_hp) || null,
-      current_hp: character.data.current_hp === undefined
-        ? Number(character.data.max_hp) || null
-        : Number(character.data.current_hp),
-      conditions: []
-    }))
+    const combatants: Combatant[] = party.items
+      .filter(character => !excluded.has(character.id))
+      .map(character => ({
+        id: lineId(),
+        name: character.name,
+        kind: 'character' as const,
+        entity_id: character.id,
+        initiative: 0,
+        max_hp: Number(character.data.max_hp) || null,
+        current_hp: character.data.current_hp === undefined
+          ? Number(character.data.max_hp) || null
+          : Number(character.data.current_hp),
+        conditions: []
+      }))
 
     for (const line of roster) {
       for (let copy = 1; copy <= line.count; copy++) {

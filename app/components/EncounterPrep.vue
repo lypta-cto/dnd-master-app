@@ -58,6 +58,34 @@ const placements = ref<Record<string, { x: number, y: number }>>(
 /** Read out when the fight begins, so the opening isn't improvised twice */
 const intro = ref<string>((props.entity.data.intro as string) ?? '')
 
+/**
+ * The party is always in the fight — that's what running an encounter means —
+ * but not always all of it: someone is captured, scouting, or sitting this
+ * one out. The encounter remembers who stays behind, not who joins, so a
+ * character created next week is included without touching old encounters.
+ */
+const party = ref<EntitySummary[]>([])
+const excluded = ref<string[]>(
+  Array.isArray(props.entity.data.excluded_party)
+    ? [...(props.entity.data.excluded_party as string[])]
+    : []
+)
+
+onMounted(async () => {
+  const page = await entities.list({ type: 'character', page_size: 50 })
+  party.value = page.items
+  portraits.remember(page.items)
+})
+
+const isExcluded = (id: string) => excluded.value.includes(id)
+
+function togglePartyMember(id: string) {
+  excluded.value = isExcluded(id)
+    ? excluded.value.filter(memberId => memberId !== id)
+    : [...excluded.value, id]
+  persist()
+}
+
 const saving = ref(false)
 const running = ref(false)
 
@@ -90,7 +118,8 @@ function persist() {
           roster: JSON.parse(JSON.stringify(roster.value)),
           map_id: mapId.value,
           placements: JSON.parse(JSON.stringify(placements.value)),
-          intro: intro.value.trim() || undefined
+          intro: intro.value.trim() || undefined,
+          excluded_party: excluded.value.length ? [...excluded.value] : undefined
         }
       })
     } catch (error) {
@@ -259,7 +288,8 @@ async function run() {
         ...props.entity.data,
         roster: JSON.parse(JSON.stringify(roster.value)),
         map_id: mapId.value,
-        placements: JSON.parse(JSON.stringify(placements.value))
+        placements: JSON.parse(JSON.stringify(placements.value)),
+        excluded_party: [...excluded.value]
       }
     })
 
@@ -307,6 +337,42 @@ async function run() {
           @click="run"
         />
       </template>
+
+      <!-- The party rides along by default; a click benches someone -->
+      <div
+        v-if="party.length"
+        class="mb-3"
+      >
+        <p class="mb-1 text-xs font-medium tracking-wide text-dimmed uppercase">
+          The party joins
+        </p>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="member in party"
+            :key="member.id"
+            type="button"
+            class="flex items-center gap-1.5 rounded-full border py-0.5 pr-2 pl-0.5 text-xs font-medium transition-colors"
+            :class="isExcluded(member.id)
+              ? 'border-default text-dimmed opacity-50'
+              : 'border-primary/40 bg-primary/10 text-highlighted'"
+            :disabled="!canEdit"
+            :title="isExcluded(member.id) ? 'Sitting this one out — click to include' : 'In the fight — click to exclude'"
+            @click="togglePartyMember(member.id)"
+          >
+            <UAvatar
+              :src="member.image_url ? mediaUrl(member.image_url) : undefined"
+              :alt="member.name"
+              icon="i-lucide-user-round"
+              size="3xs"
+            />
+            {{ member.name }}
+            <UIcon
+              :name="isExcluded(member.id) ? 'i-lucide-x' : 'i-lucide-check'"
+              class="size-3"
+            />
+          </button>
+        </div>
+      </div>
 
       <div
         v-if="roster.length"
