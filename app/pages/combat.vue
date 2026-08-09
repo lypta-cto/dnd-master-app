@@ -345,44 +345,59 @@ async function castStrip() {
 /** Empty takes the strip down — the fight is over, so the header goes too */
 const clearStrip = () => cast.setInitiative([])
 
-async function toggleStrip(value: boolean) {
-  try {
-    if (value) {
-      await castStrip()
-      toast.add({
-        title: 'Order above whatever else is on the table',
-        icon: 'i-lucide-cast',
-        color: 'success'
-      })
-    } else {
-      await clearStrip()
+async function castFullOrder() {
+  await cast.set({
+    mode: 'initiative',
+    payload: {
+      round: state.value.round,
+      active_id: activeId.value,
+      combatants: ordered.value.map((combatant, index) => ({
+        id: combatant.id,
+        ...tableEntry(combatant),
+        order: index + 1
+      }))
     }
-  } catch (error) {
-    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
-  }
+  })
 }
 
-async function castFullOrder(announce = false) {
+/**
+ * One order on the wall at a time, or none.
+ *
+ * Strip and full screen were separate controls that could both be on, which
+ * put the same list on the wall twice. It's one three-way choice now: picking
+ * either shape takes the other down with it.
+ */
+type WallMode = 'off' | 'strip' | 'full'
+
+const wallMode = computed<WallMode>(() =>
+  fullOrderUp.value ? 'full' : stripUp.value ? 'strip' : 'off'
+)
+
+const WALL_MODES: { value: WallMode, label: string, icon: string }[] = [
+  { value: 'off', label: 'Off', icon: 'i-lucide-eye-off' },
+  { value: 'strip', label: 'Strip on top', icon: 'i-lucide-panel-top' },
+  { value: 'full', label: 'Full screen', icon: 'i-lucide-monitor' }
+]
+
+async function setWallMode(mode: WallMode) {
   try {
-    const result = await cast.set({
-      mode: 'initiative',
-      payload: {
-        round: state.value.round,
-        active_id: activeId.value,
-        combatants: ordered.value.map((combatant, index) => ({
-          id: combatant.id,
-          ...tableEntry(combatant),
-          order: index + 1
-        }))
+    if (mode === 'strip') {
+      if (fullOrderUp.value) {
+        await cast.clear()
       }
-    })
-    if (announce) {
-      toast.add({
-        title: 'The order fills the screen',
-        icon: 'i-lucide-cast',
-        color: result.displays_connected ? 'success' : 'warning',
-        description: result.displays_connected ? undefined : 'No display connected'
-      })
+      await castStrip()
+    } else if (mode === 'full') {
+      if (stripUp.value) {
+        await clearStrip()
+      }
+      await castFullOrder()
+    } else {
+      if (stripUp.value) {
+        await clearStrip()
+      }
+      if (fullOrderUp.value) {
+        await cast.clear()
+      }
     }
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
@@ -1221,21 +1236,25 @@ const portraitSrc = (combatant: Combatant) => {
             />
             On the wall
           </span>
-          <USwitch
-            :model-value="stripUp"
-            label="Order above everything"
-            :disabled="!ordered.length"
-            @update:model-value="toggleStrip"
-          />
-          <UButton
-            :label="fullOrderUp ? 'Order is full screen' : 'Order full screen'"
-            icon="i-lucide-monitor"
-            size="sm"
-            :color="fullOrderUp ? 'primary' : 'neutral'"
-            :variant="fullOrderUp ? 'solid' : 'outline'"
-            :disabled="!ordered.length"
-            @click="castFullOrder(true)"
-          />
+          <div class="flex rounded-lg border border-default p-0.5">
+            <button
+              v-for="option in WALL_MODES"
+              :key="option.value"
+              type="button"
+              class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
+              :class="wallMode === option.value
+                ? 'bg-primary text-inverted'
+                : 'text-muted hover:text-highlighted'"
+              :disabled="!ordered.length && option.value !== 'off'"
+              @click="setWallMode(option.value)"
+            >
+              <UIcon
+                :name="option.icon"
+                class="size-3.5"
+              />
+              {{ option.label }}
+            </button>
+          </div>
         </div>
 
         <BattleMap

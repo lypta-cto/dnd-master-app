@@ -169,6 +169,9 @@ const grouped = computed(() => {
 const toast = useToast()
 
 const selecting = ref(false)
+
+/** The SRD import dialog — monsters only, refreshes the list per import */
+const srdOpen = ref(false)
 const selected = ref<string[]>([])
 const applying = ref(false)
 
@@ -282,6 +285,15 @@ watch([type, () => current.value?.id], () => {
     ]"
   >
     <template #actions>
+      <UButton
+        v-if="current && isDm && type === 'monster'"
+        label="Add from SRD"
+        icon="i-lucide-book-open"
+        color="neutral"
+        variant="outline"
+        class="rounded-xl"
+        @click="srdOpen = true"
+      />
       <UButton
         v-if="current && isDm && pageData?.items.length"
         :label="selecting ? 'Cancel' : 'Select'"
@@ -591,5 +603,10 @@ watch([type, () => current.value?.id], () => {
         </div>
       </template>
     </template>
+
+    <SrdMonsterImport
+      v-model:open="srdOpen"
+      @imported="load"
+    />
   </AppPage>
 </template>

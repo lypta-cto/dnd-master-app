@@ -90,6 +90,39 @@ async function destroy() {
   await navigateTo(`/entities?type=${entity.value.type}`)
 }
 
+/**
+ * A copy to rework, opened straight in the editor.
+ *
+ * This is how a Giant Rat becomes the campaign's own Beer Giant Snail: same
+ * statblock, new name, whatever else the DM rewrites. The image stays behind —
+ * a variant that looks exactly like the original defeats the point.
+ */
+const duplicating = ref(false)
+
+async function makeVariant() {
+  if (!entity.value) {
+    return
+  }
+  duplicating.value = true
+
+  try {
+    const created = await entities.create({
+      type: entity.value.type,
+      name: `${entity.value.name} (variant)`,
+      summary: entity.value.summary,
+      body: entity.value.body,
+      tags: [...entity.value.tags],
+      visibility: entity.value.visibility,
+      data: JSON.parse(JSON.stringify(entity.value.data))
+    })
+    await navigateTo(`/entities/${created.id}/edit`)
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    duplicating.value = false
+  }
+}
+
 /** Push this entity's image (or name) to the table's screen. */
 async function castThis() {
   if (!entity.value) {
@@ -223,6 +256,16 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           variant="outline"
           class="rounded-xl"
           @click="castThis"
+        />
+        <UButton
+          v-if="canWrite"
+          label="Variant"
+          icon="i-lucide-copy-plus"
+          color="neutral"
+          variant="outline"
+          class="rounded-xl"
+          :loading="duplicating"
+          @click="makeVariant"
         />
         <UButton
           v-if="canWrite"
