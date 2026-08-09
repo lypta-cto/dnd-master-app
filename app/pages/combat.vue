@@ -33,6 +33,24 @@ const customName = ref('')
  */
 const monsterQuery = ref('')
 
+/**
+ * Two screens in one, told apart by whether the fight has started.
+ *
+ * Building: who is in it, on what map, standing where. Playing: the order,
+ * damage, conditions, whose turn. They were shown together, which meant a wall
+ * of "add a bandit" buttons sat beside the initiative order all through the
+ * fight, and the thing you actually needed mid-combat was the smaller half of
+ * the screen.
+ */
+const building = computed(() => !state.value.active)
+
+/**
+ * Reinforcements are real, so adding never disappears — it just stops taking
+ * the room during a fight.
+ */
+const addersOpen = ref(false)
+const showAdders = computed(() => building.value || addersOpen.value)
+
 const shownMonsters = computed(() => {
   const needle = fold(monsterQuery.value.trim())
   if (!needle) {
@@ -446,7 +464,9 @@ function hpPercent(combatant: Combatant) {
 <template>
   <AppPage
     title="Combat"
-    description="Initiative, HP and conditions — the table sees only what you cast."
+    :description="building
+      ? 'Build the fight: who is in it, on what map, standing where.'
+      : 'Initiative, HP and conditions — the table sees only what you cast.'"
     :breadcrumb="[
       { icon: 'i-lucide-house', to: '/' },
       { label: 'Combat' }
@@ -680,9 +700,21 @@ function hpPercent(combatant: Combatant) {
         @moved="moveToken"
       />
 
-      <!-- Roster -->
+      <!-- Assembling the fight -->
       <div class="space-y-4">
+        <UButton
+          v-if="!building"
+          :label="addersOpen ? 'Done adding' : 'Add someone'"
+          :icon="addersOpen ? 'i-lucide-check' : 'i-lucide-user-plus'"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          block
+          @click="addersOpen = !addersOpen"
+        />
+
         <ContentCard
+          v-if="showAdders"
           title="The party"
           icon="i-lucide-users-round"
         >
@@ -708,6 +740,7 @@ function hpPercent(combatant: Combatant) {
         </ContentCard>
 
         <ContentCard
+          v-if="showAdders"
           title="Monsters"
           icon="i-lucide-skull"
           description="Click again for another copy — they number themselves."
@@ -761,6 +794,7 @@ function hpPercent(combatant: Combatant) {
         </ContentCard>
 
         <ContentCard
+          v-if="showAdders"
           title="Anything else"
           icon="i-lucide-shapes"
           description="A trap, lair action, a summoned wolf — no statblock needed."

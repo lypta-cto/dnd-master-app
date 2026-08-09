@@ -261,7 +261,10 @@ useHead({ title: 'Display' })
       <div class="display-map-wrap">
         <!-- Pins are percentages of the image, so they must anchor to a box
              that hugs the image exactly — not the letterboxed screen -->
-        <div class="display-map-inner">
+        <div
+          class="display-map-inner"
+          :style="{ aspectRatio: String(castAspect) }"
+        >
           <img
             :src="mediaUrl(String(state.payload.image_url))"
             alt=""
@@ -432,12 +435,12 @@ useHead({ title: 'Display' })
 
 .display-caption {
   position: absolute;
-  bottom: 2.5rem;
+  bottom: 1rem;
   left: 50%;
   transform: translateX(-50%);
-  font-size: clamp(1.25rem, 3vw, 2.25rem);
+  font-size: clamp(0.95rem, 1.4vw, 1.35rem);
   font-weight: 600;
-  padding: 0.5em 1.2em;
+  padding: 0.35em 1em;
   border-radius: 999px;
   background: rgb(0 0 0 / 55%);
   backdrop-filter: blur(8px);
@@ -489,20 +492,32 @@ useHead({ title: 'Display' })
 .display-map-wrap {
   position: absolute;
   inset: 0;
+  padding: 1rem 1rem 4.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/*
+ * Shaped like the image and grown to fit, rather than left at whatever size
+ * the file happens to be. Battle maps are often only 800px wide, and the
+ * screen was showing one at 800px in the middle of a 4K television.
+ *
+ * The box has to hug the image exactly, because every token is positioned as
+ * a percentage of it — hence the aspect ratio rather than object-fit on a
+ * larger box.
+ */
 .display-map-inner {
   position: relative;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
 }
 
 .display-map-img {
-  max-width: 100vw;
-  max-height: 100vh;
+  display: block;
+  width: 100%;
+  height: 100%;
   display: block;
   animation: display-fade 600ms ease;
 }
@@ -578,8 +593,8 @@ useHead({ title: 'Display' })
 }
 
 /* Room for the strip, so a full-height map isn't hidden underneath it */
-.display-root--with-strip {
-  padding-top: 4.5rem;
+.display-root--with-strip .display-map-wrap {
+  padding-top: 5.5rem;
 }
 
 .display-token {
@@ -616,16 +631,24 @@ useHead({ title: 'Display' })
   filter: grayscale(1);
 }
 
+/*
+ * Small and tight on purpose. Four creatures in one clearing put four labels
+ * on top of each other, and the pile was less readable than no labels at all.
+ */
 .display-token-label {
   position: absolute;
   top: 100%;
-  margin-top: 0.2rem;
-  font-size: 0.85rem;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  padding: 0.1em 0.55em;
+  line-height: 1.2;
+  padding: 0.05em 0.4em;
   border-radius: 999px;
-  background: rgb(0 0 0 / 70%);
+  background: rgb(0 0 0 / 75%);
   white-space: nowrap;
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .display-round {
