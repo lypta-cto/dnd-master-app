@@ -14,6 +14,8 @@
  * Lines keep their own `name` rather than only pointing at a monster: deleting
  * the bestiary entry later should leave the encounter readable, not blank.
  */
+import type { RosterLine } from '~/composables/useRunEncounter'
+
 const props = defineProps<{
   entity: EntityDetail
   canEdit: boolean
@@ -26,15 +28,7 @@ const combat = useCombat()
 const cast = useCast()
 const portraits = usePortraits()
 const mediaUrl = useMediaUrl()
-
-interface RosterLine {
-  id: string
-  entity_id: string | null
-  name: string
-  count: number
-  /** Copied when the line is added, so starting a fight needs no lookup */
-  hp: number | null
-}
+const runEncounter = useRunEncounter()
 
 const roster = ref<RosterLine[]>(
   Array.isArray(props.entity.data.roster) ? [...(props.entity.data.roster as RosterLine[])] : []
@@ -257,57 +251,21 @@ async function run() {
   running.value = true
 
   try {
-    // The party comes along: an initiative order without them is half a fight,
-    // and the DM would only add them by hand a moment later.
-    const party = await entities.list({ type: 'character', page_size: 50 })
-
-    const combatants: Combatant[] = party.items.map(character => ({
-      id: lineId(),
-      name: character.name,
-      kind: 'character' as const,
-      entity_id: character.id,
-      initiative: 0,
-      max_hp: Number(character.data.max_hp) || null,
-      current_hp: character.data.current_hp === undefined
-        ? Number(character.data.max_hp) || null
-        : Number(character.data.current_hp),
-      conditions: []
-    }))
-
-    for (const line of roster.value) {
-      for (let copy = 1; copy <= line.count; copy++) {
-        // Where it was prepped to stand, carried through rather than left to
-        // be redone from memory once the table is watching
-        const at = placements.value[placementKey(line, copy)]
-
-        combatants.push({
-          id: lineId(),
-          // Numbered only when there is more than one, so a lone king stays
-          // "Goblin King" rather than "Goblin King 1"
-          name: displayName(line, copy),
-          kind: line.entity_id ? 'monster' : 'custom',
-          entity_id: line.entity_id,
-          initiative: 0,
-          max_hp: line.hp,
-          current_hp: line.hp,
-          conditions: [],
-          x: at?.x ?? null,
-          y: at?.y ?? null
-        })
+    // The same door the combat screen's chooser uses — the party joins on its
+    // own, copies keep their numbers and their prepped positions.
+    const started = await runEncounter.run({
+      name: props.entity.name,
+      data: {
+        ...props.entity.data,
+        roster: JSON.parse(JSON.stringify(roster.value)),
+        map_id: mapId.value,
+        placements: JSON.parse(JSON.stringify(placements.value))
       }
-    }
-
-    await combat.set({
-      active: true,
-      round: 1,
-      turn_index: 0,
-      map_id: mapId.value,
-      combatants
     })
 
     toast.add({
       title: `“${props.entity.name}” is on`,
-      description: `${combatants.length} in the order. Roll initiative.`,
+      description: `${started.combatants.length} in the order. Roll initiative.`,
       icon: 'i-lucide-swords',
       color: 'success'
     })

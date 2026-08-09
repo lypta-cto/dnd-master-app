@@ -272,6 +272,7 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   character: [
     { key: 'class', label: 'Class', placeholder: 'Paladin', suggestions: CLASSES },
     { key: 'ancestry', label: 'Ancestry', placeholder: 'Human, dwarf, tiefling…', suggestions: ANCESTRIES },
+    { key: 'ac', label: 'AC', placeholder: '16', short: true },
     { key: 'passive_perception', label: 'Passive perception', placeholder: '13', short: true }
   ],
   npc: [
@@ -311,7 +312,10 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'ac', label: 'AC', placeholder: '15', short: true },
     { key: 'hp', label: 'HP', placeholder: '45', short: true },
     { key: 'speed', label: 'Speed', placeholder: '30 ft., fly 60 ft.' },
-    { key: 'abilities', label: 'STR/DEX/CON/INT/WIS/CHA', placeholder: '16/12/14/8/10/6' }
+    { key: 'abilities', label: 'STR/DEX/CON/INT/WIS/CHA', placeholder: '16/12/14/8/10/6' },
+    // What the tracker shows on this monster's turn — write the to-hit and
+    // the damage dice and the fight never stops for a rulebook
+    { key: 'attacks', label: 'Attacks & damage', placeholder: 'Scimitar +4 to hit, 1d6+2 slashing. Shortbow +4, 1d6+2 piercing.', long: true }
   ],
   quest: [
     { key: 'status', label: 'Status', options: ['active', 'completed', 'failed', 'paused'], short: true },
