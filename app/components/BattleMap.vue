@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// Explicit: Nuxt's auto-import scanner registers everything else in useGrid
+// but not this one, and a name that silently resolves to nothing is worse
+// than an import line.
+import { readGrid } from '~/composables/useGrid'
+
 /**
  * The fight, on a map.
  *
@@ -55,6 +60,46 @@ async function load() {
 }
 
 watch(() => props.mapId, load, { immediate: true })
+
+/* --- The grid and what "how far" means on it -------------------------------- */
+
+const grid = computed(() => (map.value ? readGrid(map.value.data) : null))
+
+/**
+ * The image's own proportions, needed to make a cell square on screen rather
+ * than square in percentages. Read off the loaded image, so it costs nothing.
+ */
+const aspect = ref(1)
+
+function onImageLoad(event: Event) {
+  const img = event.target as HTMLImageElement
+  if (img.naturalWidth && img.naturalHeight) {
+    aspect.value = img.naturalWidth / img.naturalHeight
+  }
+}
+
+/** Where a dragged token started, so the DM can see how far it has come */
+const dragOrigin = ref<{ x: number, y: number } | null>(null)
+const dragNow = ref<{ x: number, y: number } | null>(null)
+
+/** A measurement the DM took deliberately, from empty map to empty map */
+const measure = ref<{ from: { x: number, y: number }, to: { x: number, y: number } } | null>(null)
+const measuring = ref(false)
+
+const shownLine = computed(() => {
+  if (dragOrigin.value && dragNow.value) {
+    return { from: dragOrigin.value, to: dragNow.value }
+  }
+  return measure.value
+})
+
+const shownDistance = computed(() => {
+  const line = shownLine.value
+  if (!line || !grid.value) {
+    return null
+  }
+  return distanceInFeet(line.from, line.to, grid.value, aspect.value)
+})
 
 const fog = computed(() => (map.value ? readFog(map.value.data) : null))
 const cells = computed(() => (fog.value ? decodeCells(fog.value) : new Uint8Array()))
@@ -137,28 +182,123 @@ function startDrag(event: PointerEvent, id: string) {
   event.stopPropagation()
   surface.value?.setPointerCapture(event.pointerId)
   dragging.value = id
+
+  const token = props.combatants.find(c => c.id === id)
+  // Remembered so the line can be drawn from where the move began, which is
+  // the question actually being asked: can I get there from here?
+  dragOrigin.value = token?.x != null && token?.y != null ? { x: token.x, y: token.y } : null
+  dragNow.value = dragOrigin.value
 }
 
 function onPointerMove(event: PointerEvent) {
   if (dragging.value) {
-    emit('moved', dragging.value, pointAt(event))
+    const point = pointAt(event)
+    dragNow.value = point
+    emit('moved', dragging.value, point)
+    return
+  }
+
+  if (measuring.value && measure.value) {
+    measure.value = { ...measure.value, to: pointAt(event) }
   }
 }
 
 function onPointerUp() {
   dragging.value = null
+  dragOrigin.value = null
+  dragNow.value = null
+  measuring.value = false
 }
 
 /** Dropping one from the tray: click the tray token, then click the map */
 const placing = ref<string | null>(null)
 
 function onMapClick(event: PointerEvent) {
-  if (!placing.value) {
+  if (placing.value) {
+    emit('moved', placing.value, pointAt(event))
+    placing.value = null
     return
   }
-  emit('moved', placing.value, pointAt(event))
-  placing.value = null
+
+  // Empty map, grid on: drag out a measurement. Released, it stays on screen
+  // until the next one, because the answer is usually needed a second longer
+  // than the finger is down.
+  if (grid.value) {
+    const point = pointAt(event)
+    measure.value = { from: point, to: point }
+    measuring.value = true
+  }
 }
+
+/* --- Calibrating it -------------------------------------------------------- */
+
+const tuning = ref(false)
+const draft = reactive({ ...DEFAULT_GRID })
+
+function openTuner() {
+  const existing = grid.value
+  Object.assign(draft, existing ?? DEFAULT_GRID)
+  tuning.value = true
+
+  // Draw it straight away. Opening the panel to a map with no grid on it and
+  // no lines either reads as broken until you happen to nudge something.
+  if (!existing) {
+    saveGrid({ ...draft })
+  }
+}
+
+let gridTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Written to the map, not the fight: the same cave is the same cave next
+ * session, so it is calibrated once and never again.
+ *
+ * Debounced, because aligning a grid is a slider being dragged — and it reads
+ * the entity first, since `data` is replaced whole and the copy this component
+ * holds is whatever the page loaded with.
+ */
+function saveGrid(next: MapGrid | null) {
+  clearTimeout(gridTimer)
+
+  gridTimer = setTimeout(async () => {
+    if (!map.value) {
+      return
+    }
+
+    try {
+      const fresh = await entities.read(map.value.id)
+      const data = { ...fresh.data }
+
+      if (next) {
+        data.grid = { ...next }
+      } else {
+        delete data.grid
+      }
+
+      map.value = await entities.update(map.value.id, { data })
+    } catch (error) {
+      toast.add({
+        title: apiErrorMessage(error, 'Grid didn\'t save'),
+        icon: 'i-lucide-circle-alert',
+        color: 'error'
+      })
+    }
+  }, 400)
+}
+
+watch(draft, () => {
+  if (tuning.value) {
+    saveGrid({ ...draft })
+  }
+}, { deep: true })
+
+function removeGrid() {
+  tuning.value = false
+  measure.value = null
+  saveGrid(null)
+}
+
+onBeforeUnmount(() => clearTimeout(gridTimer))
 
 /* --- Casting --------------------------------------------------------------- */
 
@@ -179,6 +319,7 @@ async function castBattle() {
         caption: map.value.name,
         pins: [],
         fog: fog.value,
+        grid: grid.value,
         // Only what's on the board, and only what the party may know: a
         // monster's remaining HP is the DM's business, so tokens carry a name
         // and a side and nothing else.
@@ -230,6 +371,15 @@ defineExpose({ castBattle })
         @click="openPicker"
       />
       <UButton
+        v-if="map"
+        :label="grid ? `Grid · ${grid.feet} ft` : 'Add a grid'"
+        icon="i-lucide-grid-3x3"
+        :color="tuning ? 'primary' : 'neutral'"
+        :variant="tuning ? 'solid' : 'outline'"
+        size="sm"
+        @click="tuning ? (tuning = false) : openTuner()"
+      />
+      <UButton
         v-if="map && !prep"
         label="Cast"
         icon="i-lucide-cast"
@@ -258,6 +408,67 @@ defineExpose({ castBattle })
 
     <template v-else>
       <div
+        v-if="tuning"
+        class="flex flex-wrap items-center gap-4 border-b border-default p-3"
+      >
+        <label class="flex items-center gap-2 text-xs text-muted">
+          Squares across
+          <UInputNumber
+            v-model="draft.cols"
+            :min="2"
+            :max="200"
+            size="xs"
+            class="w-24"
+          />
+        </label>
+
+        <label class="flex items-center gap-2 text-xs text-muted">
+          Feet per square
+          <UInputNumber
+            v-model="draft.feet"
+            :min="1"
+            :max="1000"
+            size="xs"
+            class="w-24"
+          />
+        </label>
+
+        <!-- Printed maps rarely start their grid at the image edge -->
+        <label class="flex items-center gap-2 text-xs text-muted">
+          Nudge
+          <USlider
+            v-model="draft.offsetX"
+            :min="0"
+            :max="1"
+            :step="0.02"
+            class="w-20"
+          />
+          <USlider
+            v-model="draft.offsetY"
+            :min="0"
+            :max="1"
+            :step="0.02"
+            class="w-20"
+          />
+        </label>
+
+        <p class="text-xs text-dimmed">
+          Count the squares along the top of the map. Diagonals cost the same
+          as straight steps, as in the rules.
+        </p>
+
+        <UButton
+          label="Remove grid"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="ghost"
+          size="xs"
+          class="ml-auto"
+          @click="removeGrid"
+        />
+      </div>
+
+      <div
         ref="surface"
         class="relative touch-none select-none"
         :class="placing && 'cursor-crosshair'"
@@ -271,7 +482,45 @@ defineExpose({ castBattle })
           :alt="map.name"
           class="w-full"
           draggable="false"
+          @load="onImageLoad"
         >
+
+        <MapGrid
+          v-if="grid"
+          :grid="grid"
+          :aspect="aspect"
+        />
+
+        <!-- The measuring line, and what it comes to in feet -->
+        <svg
+          v-if="shownLine"
+          class="pointer-events-none absolute inset-0 size-full"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <line
+            :x1="shownLine.from.x"
+            :y1="shownLine.from.y"
+            :x2="shownLine.to.x"
+            :y2="shownLine.to.y"
+            stroke="rgb(255 160 80)"
+            stroke-width="2"
+            stroke-dasharray="4 3"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+
+        <span
+          v-if="shownLine && shownDistance !== null"
+          class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/80 px-2 py-0.5 text-xs font-semibold text-white"
+          :style="{
+            left: `${(shownLine.from.x + shownLine.to.x) / 2}%`,
+            top: `${(shownLine.from.y + shownLine.to.y) / 2}%`
+          }"
+        >
+          {{ shownDistance }} ft
+        </span>
 
         <MapFog
           v-if="fog"

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { readGrid } from '~/composables/useGrid'
+
 /**
  * The table's screen. Public by token, chromeless, dark.
  *
@@ -14,6 +16,22 @@ const campaignId = String(route.params.id)
 const token = typeof route.query.t === 'string' ? route.query.t : ''
 
 const { state, connected, failed } = useCastDisplay(campaignId, token)
+
+/**
+ * The battle grid, when the map cast carries one.
+ *
+ * The aspect ratio is read off the image as it loads: cells have to be square
+ * on the wall, and the payload only knows how many there are across.
+ */
+const castGrid = computed(() => readGrid(state.value.payload as Record<string, unknown>))
+const castAspect = ref(1)
+
+function onMapLoad(event: Event) {
+  const img = event.target as HTMLImageElement
+  if (img.naturalWidth && img.naturalHeight) {
+    castAspect.value = img.naturalWidth / img.naturalHeight
+  }
+}
 
 /** The order of turns, when a fight is running. Its own layer above the rest. */
 const strip = computed(() => state.value.initiative?.entries ?? [])
@@ -248,7 +266,15 @@ useHead({ title: 'Display' })
             :src="mediaUrl(String(state.payload.image_url))"
             alt=""
             class="display-map-img"
+            @load="onMapLoad"
           >
+
+          <MapGrid
+            v-if="castGrid"
+            :grid="castGrid"
+            :aspect="castAspect"
+            bold
+          />
 
           <!-- Opaque here: this is the screen the party is looking at -->
           <MapFog
