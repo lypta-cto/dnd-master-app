@@ -1,11 +1,15 @@
 <script setup lang="ts">
 /**
- * Pulling monsters from the SRD into the campaign's own bestiary.
+ * Pulling monsters into the campaign's own bestiary, from either of two doors.
  *
- * Import copies the statblock as a monster entity — from then on it's yours:
- * rename it, rewrite the attacks, hang a portrait on it. "Import & customise"
- * is the same thing dropped straight into the editor, for the DM whose Giant
- * Rat is about to become a Beer Giant Snail.
+ * The SRD door searches Open5e live and brings full statblocks, attacks
+ * included. The CSV door reads a spreadsheet the DM already has — hundreds of
+ * monsters from the printed books — parsed entirely in the browser, searched
+ * locally, imported one by one. Either way an import copies the statblock as
+ * a monster entity, and from then on it's yours: rename it, rewrite the
+ * attacks, hang a portrait on it. "Customise" is the same thing dropped
+ * straight into the editor, for the DM whose Giant Rat is about to become a
+ * Beer Giant Snail.
  */
 const emit = defineEmits<{
   imported: [id: string]
@@ -17,17 +21,26 @@ const entities = useEntities()
 const srd = useSrdMonsters()
 const toast = useToast()
 
+const source = ref<'srd' | 'csv'>('srd')
+
+const SOURCES = [
+  { value: 'srd', label: 'SRD, live', icon: 'i-lucide-book-open' },
+  { value: 'csv', label: 'From a CSV', icon: 'i-lucide-file-spreadsheet' }
+] as const
+
 const query = ref('')
-const results = ref<SrdMonster[]>([])
+const srdResults = ref<SrdMonster[]>([])
 const searching = ref(false)
 const busy = ref<string | null>(null)
 
+/* --- The SRD door ----------------------------------------------------------- */
+
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-async function search() {
+async function searchSrd() {
   searching.value = true
   try {
-    results.value = await srd.search(query.value)
+    srdResults.value = await srd.search(query.value)
   } catch {
     toast.add({
       title: 'The SRD is unreachable right now',
@@ -40,25 +53,76 @@ async function search() {
 }
 
 watch(query, () => {
+  if (source.value !== 'srd') {
+    return
+  }
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(search, 300)
+  searchTimer = setTimeout(searchSrd, 300)
 })
 
 watch(open, (isOpen) => {
-  if (isOpen && !results.value.length) {
-    search()
+  if (isOpen && source.value === 'srd' && !srdResults.value.length) {
+    searchSrd()
   }
 })
 
 onBeforeUnmount(() => clearTimeout(searchTimer))
 
+/* --- The CSV door ------------------------------------------------------------
+ * Loaded once per file and searched in memory: 800 rows is nothing to hold
+ * and everything to re-parse per keystroke.
+ */
+
+const csvMonsters = ref<SrdMonster[]>([])
+const csvName = ref('')
+
+async function onFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) {
+    return
+  }
+
+  const parsed = parseMonsterCsv(await file.text())
+  if (!parsed.length) {
+    toast.add({
+      title: 'No monsters found in that file',
+      description: 'It needs a header row with at least a Name column.',
+      icon: 'i-lucide-file-x',
+      color: 'error'
+    })
+    return
+  }
+
+  csvMonsters.value = parsed
+  csvName.value = file.name
+  toast.add({
+    title: `${parsed.length} monsters read from ${file.name}`,
+    icon: 'i-lucide-file-spreadsheet',
+    color: 'success'
+  })
+}
+
+const csvResults = computed(() => {
+  const needle = fold(query.value.trim())
+  const hits = needle
+    ? csvMonsters.value.filter(monster => fold(monster.name).includes(needle))
+    : csvMonsters.value
+  return hits.slice(0, 12)
+})
+
+const results = computed(() => (source.value === 'srd' ? srdResults.value : csvResults.value))
+
+/* --- Importing --------------------------------------------------------------- */
+
 async function importMonster(monster: SrdMonster, customise = false) {
   busy.value = monster.slug + (customise ? ':edit' : '')
   try {
+    const from = monster.source || 'the SRD'
     const created = await entities.create({
       type: 'monster',
       name: monster.name,
-      summary: `${monster.size} ${monster.kind}, CR ${monster.cr} — from the SRD.`,
+      summary: `${monster.size} ${monster.kind}, CR ${monster.cr} — from ${from}.`.replace(/\s+/g, ' '),
+      body: monster.body ?? null,
       data: monster.data
     })
     emit('imported', created.id)
@@ -85,70 +149,134 @@ async function importMonster(monster: SrdMonster, customise = false) {
 <template>
   <UModal
     v-model:open="open"
-    title="Add from the SRD"
-    description="The openly licensed 5e bestiary, searched live. Imported monsters are yours to rework."
+    title="Add monsters"
+    description="From the openly licensed SRD, or a spreadsheet of your own. Imported monsters are yours to rework."
     :ui="{ content: 'max-w-lg' }"
   >
     <template #body>
       <div class="space-y-3">
-        <UInput
-          v-model="query"
-          icon="i-lucide-search"
-          placeholder="Goblin, owlbear, troll…"
-          autofocus
-          class="w-full"
-          :loading="searching"
-        />
-
-        <div
-          v-if="results.length"
-          class="space-y-1"
-        >
-          <div
-            v-for="monster in results"
-            :key="monster.slug"
-            class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-elevated"
+        <div class="flex rounded-lg border border-default p-0.5">
+          <button
+            v-for="option in SOURCES"
+            :key="option.value"
+            type="button"
+            class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+            :class="source === option.value
+              ? 'bg-primary text-inverted'
+              : 'text-muted hover:text-highlighted'"
+            @click="source = option.value"
           >
             <UIcon
-              name="i-lucide-skull"
-              class="size-4 shrink-0 text-dimmed"
+              :name="option.icon"
+              class="size-3.5"
             />
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-highlighted">
-                {{ monster.name }}
-              </p>
-              <p class="text-xs text-dimmed">
-                {{ monster.size }} {{ monster.kind }} · CR {{ monster.cr }} ·
-                AC {{ monster.ac }} · {{ monster.hp }} HP
-              </p>
-            </div>
-            <UButton
-              label="Import"
-              size="xs"
-              color="neutral"
-              variant="outline"
-              :loading="busy === monster.slug"
-              @click="importMonster(monster)"
-            />
-            <UTooltip text="Import, then edit it into your own creature">
-              <UButton
-                label="Customise"
-                icon="i-lucide-pencil"
-                size="xs"
-                variant="soft"
-                :loading="busy === `${monster.slug}:edit`"
-                @click="importMonster(monster, true)"
-              />
-            </UTooltip>
-          </div>
+            {{ option.label }}
+          </button>
         </div>
 
-        <p
-          v-else-if="!searching"
-          class="text-sm text-muted"
+        <!-- The file, asked for once -->
+        <div
+          v-if="source === 'csv' && !csvMonsters.length"
+          class="rounded-xl border border-dashed border-default p-4 text-center"
         >
-          Nothing in the SRD matches “{{ query }}”.
-        </p>
+          <p class="mb-2 text-sm text-muted">
+            A spreadsheet export with a header row — Name, Type, AC, HP, CR and
+            friends. Read here in the browser; nothing is uploaded.
+          </p>
+          <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-default px-3 py-1.5 text-sm font-medium text-highlighted transition-colors hover:border-accented">
+            <UIcon
+              name="i-lucide-upload"
+              class="size-4"
+            />
+            Choose a .csv file
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              class="hidden"
+              @change="onFile"
+            >
+          </label>
+        </div>
+
+        <template v-if="source === 'srd' || csvMonsters.length">
+          <div class="flex items-center gap-2">
+            <UInput
+              v-model="query"
+              icon="i-lucide-search"
+              placeholder="Goblin, owlbear, troll…"
+              autofocus
+              class="w-full"
+              :loading="searching"
+            />
+            <label
+              v-if="source === 'csv'"
+              class="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-highlighted"
+              :title="csvName"
+            >
+              <UIcon
+                name="i-lucide-file-spreadsheet"
+                class="size-3.5"
+              />
+              {{ csvMonsters.length }} loaded
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                class="hidden"
+                @change="onFile"
+              >
+            </label>
+          </div>
+
+          <div
+            v-if="results.length"
+            class="max-h-80 space-y-1 overflow-y-auto"
+          >
+            <div
+              v-for="monster in results"
+              :key="monster.slug"
+              class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-elevated"
+            >
+              <UIcon
+                name="i-lucide-skull"
+                class="size-4 shrink-0 text-dimmed"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-highlighted">
+                  {{ monster.name }}
+                </p>
+                <p class="truncate text-xs text-dimmed">
+                  {{ monster.size }} {{ monster.kind }} · CR {{ monster.cr }} ·
+                  AC {{ monster.ac }} · {{ monster.hp }} HP
+                </p>
+              </div>
+              <UButton
+                label="Import"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                :loading="busy === monster.slug"
+                @click="importMonster(monster)"
+              />
+              <UTooltip text="Import, then edit it into your own creature">
+                <UButton
+                  label="Customise"
+                  icon="i-lucide-pencil"
+                  size="xs"
+                  variant="soft"
+                  :loading="busy === `${monster.slug}:edit`"
+                  @click="importMonster(monster, true)"
+                />
+              </UTooltip>
+            </div>
+          </div>
+
+          <p
+            v-else-if="!searching"
+            class="text-sm text-muted"
+          >
+            Nothing matches “{{ query }}”.
+          </p>
+        </template>
       </div>
     </template>
   </UModal>

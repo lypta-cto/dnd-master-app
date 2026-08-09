@@ -41,6 +41,10 @@ export interface SrdMonster {
   cr: string
   ac: string
   hp: number
+  /** Which book or file it came from, when known */
+  source?: string
+  /** Traits, saves, senses — statblock text that isn't a stat field */
+  body?: string
   /** Ready to drop straight into the entity's data */
   data: Record<string, unknown>
 }
