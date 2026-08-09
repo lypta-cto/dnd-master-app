@@ -87,7 +87,11 @@ watch(
 
     await Promise.all(ids.map(async (id) => {
       try {
-        statblocks.value = { ...statblocks.value, [id]: await entities.read(id) }
+        // Await first, spread after: spreading in the same expression copies
+        // the cache *before* suspending, and parallel fetches would each
+        // resurrect that stale copy — last one to land wins, rest vanish.
+        const entity = await entities.read(id)
+        statblocks.value = { ...statblocks.value, [id]: entity }
       } catch {
         // Deleted mid-session. The card just shows less.
       }
@@ -138,9 +142,37 @@ function rollFormula(formula: string) {
   })
 }
 
-const ordered = computed(() =>
-  [...state.value.combatants].sort((a, b) => b.initiative - a.initiative)
-)
+/**
+ * The order holds still while an initiative is being edited.
+ *
+ * Sorting live meant typing "18" re-sorted the list at "1" — the row jumped
+ * away mid-keystroke and a higher number than the row above was untypeable.
+ * While any initiative popover is open the visual order is pinned; closing it
+ * lets the list fall into the new order, which is also when it saves.
+ */
+const initiativeOpen = reactive<Record<string, boolean>>({})
+const pinnedOrder = ref<string[] | null>(null)
+
+const ordered = computed(() => {
+  if (pinnedOrder.value) {
+    const position = new Map(pinnedOrder.value.map((id, index) => [id, index]))
+    return [...state.value.combatants].sort(
+      (a, b) => (position.get(a.id) ?? 999) - (position.get(b.id) ?? 999)
+    )
+  }
+  return [...state.value.combatants].sort((a, b) => b.initiative - a.initiative)
+})
+
+function setInitiativeOpen(id: string, open: boolean) {
+  if (open && !pinnedOrder.value) {
+    pinnedOrder.value = ordered.value.map(c => c.id)
+  }
+  initiativeOpen[id] = open
+  if (!open && !Object.values(initiativeOpen).some(Boolean)) {
+    pinnedOrder.value = null
+    queueSave()
+  }
+}
 
 /** turn_index counts through the *sorted* order */
 const activeId = computed(() => ordered.value[state.value.turn_index]?.id ?? null)
@@ -546,26 +578,21 @@ async function writeHp(combatant: Combatant, next: number) {
 }
 
 /**
- * One amount, two directions. The sword took 7: type 7, press the sword.
- * Kept per combatant, because "the last hit on this goblin" repeats far more
- * often than it changes.
+ * The sword and the heart each open a small popover asking "how much?" —
+ * type the number, press enter, done. The amount is kept per combatant,
+ * because "the last hit on this goblin" repeats far more often than it
+ * changes.
  */
+const hitOpen = reactive<Record<string, 'dmg' | 'heal' | undefined>>({})
 const amounts = reactive<Record<string, number>>({})
 
-const amountFor = (combatant: Combatant) => Math.abs(amounts[combatant.id] ?? 1) || 1
-
-function damage(combatant: Combatant) {
+function applyHit(combatant: Combatant, direction: 1 | -1) {
   if (combatant.max_hp == null) {
     return
   }
-  writeHp(combatant, (combatant.current_hp ?? combatant.max_hp) - amountFor(combatant))
-}
-
-function heal(combatant: Combatant) {
-  if (combatant.max_hp == null) {
-    return
-  }
-  writeHp(combatant, (combatant.current_hp ?? combatant.max_hp) + amountFor(combatant))
+  const amount = Math.abs(amounts[combatant.id] ?? 1) || 1
+  writeHp(combatant, (combatant.current_hp ?? combatant.max_hp) + direction * amount)
+  hitOpen[combatant.id] = undefined
 }
 
 /** Straight to the floor — save-or-die, a called shot, the DM's ruling */
@@ -865,19 +892,66 @@ const portraitSrc = (combatant: Combatant) => {
             :class="combatant.id === activeId && 'bg-primary/5 ring-1 ring-inset ring-primary/30'"
           >
             <div class="flex items-center gap-3">
-              <UInputNumber
-                :model-value="combatant.initiative"
-                :min="-10"
-                :max="50"
-                size="sm"
-                class="w-20 shrink-0"
-                :aria-label="`Initiative for ${combatant.name}`"
-                @update:model-value="value => {
-                  snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
-                  combatant.initiative = value ?? 0
-                  queueSave()
-                }"
-              />
+              <!-- Initiative wears a diamond, AC wears a shield — different
+                 shapes so the two numbers never read as each other -->
+              <UPopover
+                :open="initiativeOpen[combatant.id] ?? false"
+                @update:open="open => setInitiativeOpen(combatant.id, open)"
+              >
+                <button
+                  type="button"
+                  class="relative flex size-9 shrink-0 items-center justify-center"
+                  :aria-label="`Initiative for ${combatant.name}`"
+                >
+                  <span class="absolute inset-1 rotate-45 rounded-[5px] border-2 border-primary/50 bg-primary/10 transition-colors hover:bg-primary/20" />
+                  <span class="relative text-sm font-bold tabular-nums text-highlighted">
+                    {{ combatant.initiative }}
+                  </span>
+                </button>
+                <template #content>
+                  <form
+                    class="w-44 space-y-2 p-2.5"
+                    @submit.prevent="setInitiativeOpen(combatant.id, false)"
+                  >
+                    <!-- A plain input on purpose: the fancy number field kept
+                       its keystrokes to itself inside a popover, and a roll
+                       you can't type in is no roll at all -->
+                    <UInput
+                      type="number"
+                      :model-value="combatant.initiative"
+                      size="sm"
+                      class="w-full"
+                      autofocus
+                      :aria-label="`Initiative for ${combatant.name}`"
+                      @focus="($event.target as HTMLInputElement).select()"
+                      @keydown.enter.prevent="setInitiativeOpen(combatant.id, false)"
+                      @update:model-value="value => {
+                        snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
+                        combatant.initiative = Math.max(-10, Math.min(50, Number(value) || 0))
+                      }"
+                    />
+                    <div class="flex gap-1.5">
+                      <UButton
+                        label="d20"
+                        icon="i-lucide-dices"
+                        size="xs"
+                        color="neutral"
+                        variant="outline"
+                        @click="() => {
+                          snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
+                          combatant.initiative = 1 + Math.floor(Math.random() * 20)
+                        }"
+                      />
+                      <UButton
+                        type="submit"
+                        label="Done"
+                        size="xs"
+                        class="flex-1 justify-center"
+                      />
+                    </div>
+                  </form>
+                </template>
+              </UPopover>
 
               <UAvatar
                 :src="portraitSrc(combatant)"
@@ -960,7 +1034,7 @@ const portraitSrc = (combatant: Combatant) => {
               <!-- Conditions live behind one small button, not six on every row -->
               <UPopover>
                 <UButton
-                  icon="i-lucide-sparkles"
+                  icon="i-lucide-activity"
                   size="xs"
                   :color="combatant.conditions.length ? 'warning' : 'neutral'"
                   :variant="combatant.conditions.length ? 'soft' : 'ghost'"
@@ -995,7 +1069,7 @@ const portraitSrc = (combatant: Combatant) => {
             <!-- HP: the bar, the number, and the two directions damage goes -->
             <div
               v-if="combatant.max_hp != null"
-              class="mt-2 flex items-center gap-2 pl-[5.75rem]"
+              class="mt-2 flex items-center gap-2 pl-12"
             >
               <div class="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-elevated">
                 <div
@@ -1008,31 +1082,80 @@ const portraitSrc = (combatant: Combatant) => {
                 {{ combatant.current_hp ?? combatant.max_hp }}<span class="text-dimmed">/{{ combatant.max_hp }}</span>
               </span>
 
-              <UInputNumber
-                :model-value="amounts[combatant.id] ?? 1"
-                :min="1"
-                :max="999"
-                size="xs"
-                class="w-16 shrink-0"
-                :aria-label="`Amount for ${combatant.name}`"
-                @update:model-value="value => amounts[combatant.id] = value ?? 1"
-              />
-              <UButton
-                icon="i-lucide-sword"
-                size="xs"
-                color="error"
-                variant="soft"
-                :aria-label="`Damage ${combatant.name}`"
-                @click="damage(combatant)"
-              />
-              <UButton
-                icon="i-lucide-heart-plus"
-                size="xs"
-                color="success"
-                variant="soft"
-                :aria-label="`Heal ${combatant.name}`"
-                @click="heal(combatant)"
-              />
+              <UPopover
+                :open="hitOpen[combatant.id] === 'dmg'"
+                @update:open="open => hitOpen[combatant.id] = open ? 'dmg' : undefined"
+              >
+                <UButton
+                  icon="i-lucide-sword"
+                  size="xs"
+                  color="error"
+                  variant="soft"
+                  :aria-label="`Damage ${combatant.name}`"
+                />
+                <template #content>
+                  <form
+                    class="flex items-center gap-1.5 p-2"
+                    @submit.prevent="applyHit(combatant, -1)"
+                  >
+                    <UInput
+                      type="number"
+                      :model-value="amounts[combatant.id] ?? 1"
+                      size="sm"
+                      class="w-24"
+                      autofocus
+                      :aria-label="`Damage amount for ${combatant.name}`"
+                      @focus="($event.target as HTMLInputElement).select()"
+                      @keydown.enter.prevent="applyHit(combatant, -1)"
+                      @update:model-value="value => amounts[combatant.id] = Number(value) || 1"
+                    />
+                    <UButton
+                      type="submit"
+                      label="Hit"
+                      icon="i-lucide-sword"
+                      color="error"
+                      size="sm"
+                    />
+                  </form>
+                </template>
+              </UPopover>
+              <UPopover
+                :open="hitOpen[combatant.id] === 'heal'"
+                @update:open="open => hitOpen[combatant.id] = open ? 'heal' : undefined"
+              >
+                <UButton
+                  icon="i-lucide-heart-plus"
+                  size="xs"
+                  color="success"
+                  variant="soft"
+                  :aria-label="`Heal ${combatant.name}`"
+                />
+                <template #content>
+                  <form
+                    class="flex items-center gap-1.5 p-2"
+                    @submit.prevent="applyHit(combatant, 1)"
+                  >
+                    <UInput
+                      type="number"
+                      :model-value="amounts[combatant.id] ?? 1"
+                      size="sm"
+                      class="w-24"
+                      autofocus
+                      :aria-label="`Heal amount for ${combatant.name}`"
+                      @focus="($event.target as HTMLInputElement).select()"
+                      @keydown.enter.prevent="applyHit(combatant, 1)"
+                      @update:model-value="value => amounts[combatant.id] = Number(value) || 1"
+                    />
+                    <UButton
+                      type="submit"
+                      label="Heal"
+                      icon="i-lucide-heart-plus"
+                      color="success"
+                      size="sm"
+                    />
+                  </form>
+                </template>
+              </UPopover>
               <UButton
                 v-if="combatant.kind !== 'character' && healthOf(combatant) !== 'down'"
                 icon="i-lucide-skull"
@@ -1047,7 +1170,7 @@ const portraitSrc = (combatant: Combatant) => {
             <!-- On a monster's turn: how it fights, dice ready to press -->
             <div
               v-if="combatant.id === activeId && attacksFor(combatant)"
-              class="mt-2 ml-[5.75rem] rounded-xl bg-elevated/60 p-2.5"
+              class="mt-2 ml-12 rounded-xl bg-elevated/60 p-2.5"
             >
               <p class="text-xs leading-relaxed whitespace-pre-line text-toned">
                 {{ attacksFor(combatant) }}
