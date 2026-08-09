@@ -137,9 +137,10 @@ useHead({ title: 'Display' })
     :class="strip.length > 0 && 'display-root--with-strip'"
   >
     <!-- The order of turns, above whatever else is showing. Its own layer, so
-         casting a map or a portrait mid-fight doesn't take it away. -->
+         casting a map or a portrait mid-fight doesn't take it away. Hidden
+         only when the full-screen order is up: the same list twice is noise. -->
     <div
-      v-if="strip.length"
+      v-if="strip.length && state.mode !== 'initiative'"
       class="display-strip"
     >
       <span class="display-strip-round">Round {{ state.initiative?.round ?? 1 }}</span>
@@ -152,6 +153,12 @@ useHead({ title: 'Display' })
           turn.down && 'display-strip-name--down'
         ]"
       >
+        <img
+          v-if="turn.image_url"
+          :src="mediaUrl(turn.image_url)"
+          alt=""
+          class="display-strip-face"
+        >
         {{ turn.name }}
       </span>
     </div>
@@ -352,6 +359,19 @@ useHead({ title: 'Display' })
         >
           <span class="display-initiative-marker">
             {{ combatant.id === state.payload.active_id ? '▸' : '' }}
+          </span>
+          <span
+            class="display-initiative-face"
+            :class="combatant.kind === 'character'
+              ? 'display-initiative-face--party'
+              : 'display-initiative-face--foe'"
+          >
+            <img
+              v-if="combatant.image_url"
+              :src="mediaUrl(combatant.image_url)"
+              alt=""
+            >
+            <template v-else>{{ String(combatant.name ?? '').slice(0, 2).toUpperCase() }}</template>
           </span>
           <span class="display-initiative-name">{{ combatant.name }}</span>
           <span
@@ -580,8 +600,19 @@ useHead({ title: 'Display' })
 }
 
 .display-strip-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-size: 1.35rem;
   opacity: 0.55;
+}
+
+.display-strip-face {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid rgb(255 255 255 / 45%);
 }
 
 /* Whose turn it is, readable from the far end of the table */
@@ -694,6 +725,36 @@ useHead({ title: 'Display' })
 .display-initiative-marker {
   width: 1.5rem;
   color: rgb(255 200 120);
+}
+
+/* The face is the point of the full-screen order: the table sees who is up,
+   not just a name they may have met once, three sessions ago */
+.display-initiative-face {
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 999px;
+  border: 3px solid rgb(255 255 255 / 55%);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.display-initiative-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.display-initiative-face--party {
+  background: rgb(255 140 60);
+}
+
+.display-initiative-face--foe {
+  background: rgb(200 50 50);
 }
 
 .display-initiative-name {

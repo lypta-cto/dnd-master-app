@@ -108,32 +108,19 @@ const cells = computed(() => (fog.value ? decodeCells(fog.value) : new Uint8Arra
  * A face on the token, where the combatant points at something with a picture.
  *
  * Two letters told you which goblin was which and nothing about who it was.
- * Fetched once per entity and remembered, because a fight redraws constantly
- * and this must not become a request per frame.
+ * The cache is the app-wide one, so the roster rail and the token draw the
+ * same fetch — a fight redraws constantly and this must not become a request
+ * per frame.
  */
-const portraits = ref<Record<string, string>>({})
+const portraits = usePortraits()
 
-async function loadPortraits() {
-  const ids = [...new Set(
-    props.combatants.map(c => c.entity_id).filter((id): id is string => !!id)
-  )].filter(id => !(id in portraits.value))
+watch(
+  () => props.combatants.map(c => c.entity_id).join(','),
+  () => portraits.ensure(props.combatants.map(c => c.entity_id)),
+  { immediate: true }
+)
 
-  await Promise.all(ids.map(async (id) => {
-    try {
-      const entity = await entities.read(id)
-      // Recorded either way: an empty string means "asked, hasn't got one",
-      // which stops it being asked again on every redraw.
-      portraits.value = { ...portraits.value, [id]: entity.image_url ?? '' }
-    } catch {
-      portraits.value = { ...portraits.value, [id]: '' }
-    }
-  }))
-}
-
-watch(() => props.combatants.map(c => c.entity_id).join(','), loadPortraits, { immediate: true })
-
-const portraitFor = (token: Combatant) =>
-  token.entity_id ? portraits.value[token.entity_id] || null : null
+const portraitFor = (token: Combatant) => portraits.urlFor(token.entity_id)
 
 /* --- Picking a map --------------------------------------------------------- */
 

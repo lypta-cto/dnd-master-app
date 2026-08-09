@@ -5,6 +5,8 @@ export interface InitiativeEntry {
   kind: string
   down: boolean
   active: boolean
+  /** The face the party already sees on the board — fine for the wall too */
+  image_url?: string | null
 }
 
 /** The strip above whatever else is showing, with its own round */

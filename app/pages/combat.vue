@@ -2,84 +2,59 @@
 /**
  * The fight, from the DM's side of the screen.
  *
+ * Two screens that share one state. Prepare is a playground: the board in the
+ * middle, the two sides of the fight beside it, everything added through one
+ * picker with faces on it. Run is the fight: the order on the left with whose
+ * turn it is, the board on the right, and nothing about assembling in sight.
+ *
  * Every change saves the whole state (one PUT — matches the table's pace) and,
- * when "show on display" is on, casts a sanitised initiative list: names and
- * turn order only. Monster HP never leaves this screen.
+ * when something initiative-shaped is on the wall, keeps it live. Monster HP
+ * never leaves this screen.
  */
 const { current, isDm } = useCampaigns()
 const entities = useEntities()
 const combat = useCombat()
 const cast = useCast()
+const portraits = usePortraits()
+const mediaUrl = useMediaUrl()
 const toast = useToast()
 
 const state = ref<CombatState>({ active: false, round: 1, turn_index: 0, combatants: [] })
 const loading = ref(true)
+
 /**
  * Read from what's actually on the table, not from a local flag.
  *
  * A local one said "off" every time the DM came back to this page, so the
  * switch claimed nothing was being shown while the party watched initiative.
  */
-const casting = computed(() => !!cast.current.value?.initiative?.entries?.length)
+const stripUp = computed(() => !!cast.current.value?.initiative?.entries?.length)
+const fullOrderUp = computed(() => cast.current.value?.mode === 'initiative')
 
-const characters = ref<EntitySummary[]>([])
-const monsters = ref<EntitySummary[]>([])
-const customName = ref('')
-
-/**
- * Filtered here rather than re-fetched: the whole bestiary is already loaded
- * for this screen, and a request per keystroke mid-fight is latency the table
- * would feel. Folded, so "kovac" finds "Kovač" like everywhere else.
- */
-const monsterQuery = ref('')
-
-/**
- * Two screens in one, told apart by whether the fight has started.
- *
- * Building: who is in it, on what map, standing where. Playing: the order,
- * damage, conditions, whose turn. They were shown together, which meant a wall
- * of "add a bandit" buttons sat beside the initiative order all through the
- * fight, and the thing you actually needed mid-combat was the smaller half of
- * the screen.
- */
 /**
  * Which half of the screen you're on, chosen rather than inferred.
  *
- * This was inferred from whether the fight had started, which meant the split
- * was invisible: the page quietly rearranged itself and looked like the same
- * one screen it had always been. It's a switch you press now, and it says
- * which half you're in.
- *
- * Independent of `active` on purpose — flipping back to Build mid-fight is how
- * reinforcements arrive, and must not end the fight to do it.
+ * Independent of `active` on purpose — flipping back to Prepare mid-fight is
+ * how reinforcements arrive, and must not end the fight to do it.
  */
 const view = ref<'build' | 'play'>('build')
-
 const building = computed(() => view.value === 'build')
 
 const VIEWS = [
-  { label: 'Build the fight', value: 'build', icon: 'i-lucide-users-round' },
-  { label: 'Play it out', value: 'play', icon: 'i-lucide-swords' }
+  { label: 'Prepare', value: 'build', icon: 'i-lucide-hammer' },
+  { label: 'Run the fight', value: 'play', icon: 'i-lucide-swords' }
 ]
 
-// A fight already running belongs on the play half the moment the page opens
+// A fight already running belongs on the run half the moment the page opens
 watch(() => state.value.active, (active) => {
   if (active) {
     view.value = 'play'
   }
 })
 
-const showAdders = computed(() => building.value)
-
-const shownMonsters = computed(() => {
-  const needle = fold(monsterQuery.value.trim())
-  if (!needle) {
-    return monsters.value
-  }
-  return monsters.value.filter(monster => fold(monster.name).includes(needle))
-})
-
 const QUICK_CONDITIONS = ['prone', 'poisoned', 'stunned', 'restrained', 'frightened', 'concentrating']
+
+const characters = ref<EntitySummary[]>([])
 
 async function load() {
   if (!current.value || !isDm.value) {
@@ -89,20 +64,26 @@ async function load() {
 
   loading.value = true
   try {
-    const [fight, chars, mons] = await Promise.all([
+    const [fight, chars] = await Promise.all([
       combat.get(),
-      entities.list({ type: 'character', page_size: 100 }),
-      entities.list({ type: 'monster', page_size: 200 })
+      entities.list({ type: 'character', page_size: 100 })
     ])
     state.value = fight
     characters.value = chars.items
-    monsters.value = mons.items
+    portraits.remember(chars.items)
   } finally {
     loading.value = false
   }
 }
 
 watch(() => current.value?.id, load, { immediate: true })
+
+// Faces for whoever is in the fight, wherever they came from
+watch(
+  () => state.value.combatants.map(c => c.entity_id).join(','),
+  () => portraits.ensure(state.value.combatants.map(c => c.entity_id)),
+  { immediate: true }
+)
 
 const ordered = computed(() =>
   [...state.value.combatants].sort((a, b) => b.initiative - a.initiative)
@@ -116,13 +97,28 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 async function persist() {
   try {
     await combat.set(state.value)
-    if (casting.value) {
-      await castInitiative()
-    }
+    await syncCasts()
   } catch (error) {
     toast.add({ title: apiErrorMessage(error, 'Save failed'), icon: 'i-lucide-circle-alert', color: 'error' })
   }
 }
+
+/** Whatever initiative-shaped thing is on the wall follows the fight live */
+async function syncCasts() {
+  if (stripUp.value) {
+    await castStrip()
+  }
+  if (fullOrderUp.value) {
+    await castFullOrder()
+  }
+}
+
+function queueSave() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(persist, 400)
+}
+
+onUnmounted(() => clearTimeout(saveTimer))
 
 /* --- The battle map -------------------------------------------------------- */
 
@@ -152,13 +148,6 @@ function moveToken(id: string, point: { x: number, y: number }) {
   // filling the history with them would bury the moves worth undoing.
   queueSave()
 }
-
-function queueSave() {
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(persist, 400)
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
 
 /* --- Undo ------------------------------------------------------------------
  * Mid-fight mistakes are constant: damage on the wrong goblin, a turn skipped.
@@ -246,50 +235,84 @@ async function syncCharacterSheets() {
 
 defineShortcuts({ meta_z: undo })
 
-/**
- * The order of turns, as a strip above whatever else is on the wall.
- *
- * It used to be a cast mode of its own, which meant the table could see the
- * order *or* the battle map and never both — and casting the map silently
- * took the order away mid-fight. It has its own lifetime now: up while the
- * fight runs, underneath everything cast in between.
- *
- * What the table is allowed to know: order, whose turn, who is down. Never a
- * monster's remaining hit points.
+/* --- What the table sees ----------------------------------------------------
+ * Two shapes, each with its own lifetime. The strip rides above whatever else
+ * is cast — map, portrait, dice — for glancing at mid-fight. The full order
+ * takes the whole screen, faces and all, for the "roll initiative" moment.
+ * Both carry only what the table may know: order, whose turn, who is down,
+ * and the picture the party can already see on the board. Never HP.
  */
-async function castInitiative() {
-  await cast.setInitiative(
-    ordered.value.map(c => ({
-      name: c.name,
-      kind: c.kind,
-      down: c.current_hp === 0,
-      active: c.id === activeId.value
-    })),
-    state.value.round
-  )
+
+function tableEntry(combatant: Combatant) {
+  return {
+    name: combatant.name,
+    kind: combatant.kind,
+    down: combatant.current_hp === 0,
+    active: combatant.id === activeId.value,
+    image_url: combatant.entity_id ? portraits.urlFor(combatant.entity_id) : null
+  }
+}
+
+async function castStrip() {
+  await cast.setInitiative(ordered.value.map(tableEntry), state.value.round)
 }
 
 /** Empty takes the strip down — the fight is over, so the header goes too */
-const clearInitiative = () => cast.setInitiative([])
+const clearStrip = () => cast.setInitiative([])
 
-async function toggleCasting(value: boolean) {
+async function toggleStrip(value: boolean) {
   try {
     if (value) {
-      await castInitiative()
+      await castStrip()
       toast.add({
-        title: 'Initiative above whatever else is on the table',
+        title: 'Order above whatever else is on the table',
         icon: 'i-lucide-cast',
         color: 'success'
       })
     } else {
-      await clearInitiative()
+      await clearStrip()
     }
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   }
 }
 
-/* --- Roster ---------------------------------------------------------------- */
+async function castFullOrder(announce = false) {
+  try {
+    const result = await cast.set({
+      mode: 'initiative',
+      payload: {
+        round: state.value.round,
+        active_id: activeId.value,
+        combatants: ordered.value.map((combatant, index) => ({
+          id: combatant.id,
+          ...tableEntry(combatant),
+          order: index + 1
+        }))
+      }
+    })
+    if (announce) {
+      toast.add({
+        title: 'The order fills the screen',
+        icon: 'i-lucide-cast',
+        color: result.displays_connected ? 'success' : 'warning',
+        description: result.displays_connected ? undefined : 'No display connected'
+      })
+    }
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  }
+}
+
+/* --- Assembling ------------------------------------------------------------- */
+
+const pickerOpen = ref(false)
+
+const takenEntityIds = computed(() =>
+  state.value.combatants
+    .filter(c => c.kind === 'character' && c.entity_id)
+    .map(c => c.entity_id!)
+)
 
 function nextId() {
   return Math.random().toString(36).slice(2, 10)
@@ -300,6 +323,7 @@ function addCharacter(character: EntitySummary) {
     return
   }
   snapshot(`added ${character.name}`)
+  portraits.remember([character])
   state.value.combatants.push({
     id: nextId(),
     name: character.name,
@@ -320,6 +344,7 @@ function addMonster(monster: EntitySummary) {
   const copies = state.value.combatants.filter(c => c.entity_id === monster.id).length
   const hp = Number(monster.data.hp) || null
   snapshot(`added ${monster.name}`)
+  portraits.remember([monster])
   state.value.combatants.push({
     id: nextId(),
     name: copies ? `${monster.name} ${copies + 1}` : monster.name,
@@ -333,17 +358,12 @@ function addMonster(monster: EntitySummary) {
   queueSave()
 }
 
-function addCustom() {
-  const name = customName.value.trim()
-  if (!name) {
-    return
-  }
+function addCustom(name: string) {
   snapshot(`added ${name}`)
   state.value.combatants.push({
     id: nextId(), name, kind: 'custom', initiative: 0,
     max_hp: null, current_hp: null, conditions: []
   })
-  customName.value = ''
   queueSave()
 }
 
@@ -363,6 +383,88 @@ function removeCombatant(id: string) {
   queueSave()
 }
 
+/**
+ * The two sides of the fight, as the Prepare rail shows them.
+ *
+ * The state stores one combatant per creature ("Goblin", "Goblin 2", …), which
+ * is what a fight needs — but while assembling, "Goblin ×5" with a stepper is
+ * the shape the DM is thinking in. Copies of the same statblock fold into one
+ * line; customs stay one line each, since nothing links them.
+ */
+const party = computed(() => state.value.combatants.filter(c => c.kind === 'character'))
+
+interface EnemyLine {
+  key: string
+  name: string
+  entity_id: string | null
+  count: number
+  hp: number | null
+  /** ids of the copies, last one first, so the stepper can take one away */
+  memberIds: string[]
+}
+
+const enemies = computed<EnemyLine[]>(() => {
+  const lines = new Map<string, EnemyLine>()
+
+  for (const combatant of state.value.combatants) {
+    if (combatant.kind === 'character') {
+      continue
+    }
+    const key = combatant.entity_id ?? `custom:${combatant.id}`
+    const line = lines.get(key)
+
+    if (line) {
+      line.count += 1
+      line.memberIds.unshift(combatant.id)
+    } else {
+      lines.set(key, {
+        key,
+        // The first copy carries the unnumbered name
+        name: combatant.name,
+        entity_id: combatant.entity_id ?? null,
+        count: 1,
+        hp: combatant.max_hp ?? null,
+        memberIds: [combatant.id]
+      })
+    }
+  }
+
+  return [...lines.values()]
+})
+
+function addCopy(line: EnemyLine) {
+  snapshot(`added ${line.name}`)
+  state.value.combatants.push({
+    id: nextId(),
+    name: `${line.name} ${line.count + 1}`,
+    kind: line.entity_id ? 'monster' : 'custom',
+    entity_id: line.entity_id,
+    initiative: 0,
+    max_hp: line.hp,
+    current_hp: line.hp,
+    conditions: []
+  })
+  queueSave()
+}
+
+function removeCopy(line: EnemyLine) {
+  const id = line.memberIds[0]
+  if (id) {
+    removeCombatant(id)
+  }
+}
+
+function removeLine(line: EnemyLine) {
+  snapshot(`removed ${line.name}`)
+  const members = new Set(line.memberIds)
+  state.value.combatants = state.value.combatants.filter(c => !members.has(c.id))
+  state.value.turn_index = Math.min(
+    state.value.turn_index,
+    Math.max(0, state.value.combatants.length - 1)
+  )
+  queueSave()
+}
+
 /* --- Running the fight ------------------------------------------------------ */
 
 function start() {
@@ -370,6 +472,7 @@ function start() {
   state.value.active = true
   state.value.round = 1
   state.value.turn_index = 0
+  view.value = 'play'
   persist()
 }
 
@@ -378,9 +481,12 @@ async function end() {
   clearTimeout(saveTimer)
   await combat.set(state.value)
 
-  // The strip comes down with the fight; whatever else is on the wall stays
-  if (casting.value) {
-    await clearInitiative()
+  // Both orders come down with the fight; whatever else was cast stays
+  if (stripUp.value) {
+    await clearStrip()
+  }
+  if (fullOrderUp.value) {
+    await cast.clear()
   }
   toast.add({ title: `Combat ended after round ${state.value.round}`, icon: 'i-lucide-flag', color: 'success' })
 }
@@ -479,14 +585,19 @@ function hpPercent(combatant: Combatant) {
   const current = combatant.current_hp ?? combatant.max_hp
   return Math.max(0, Math.min(100, (current / combatant.max_hp) * 100))
 }
+
+const portraitSrc = (combatant: Combatant) => {
+  const url = combatant.entity_id ? portraits.urlFor(combatant.entity_id) : null
+  return url ? mediaUrl(url) : undefined
+}
 </script>
 
 <template>
   <AppPage
     title="Combat"
     :description="building
-      ? 'Build the fight: who is in it, on what map, standing where.'
-      : 'Initiative, HP and conditions — the table sees only what you cast.'"
+      ? 'The playground: pick the map, gather both sides, set where everyone starts.'
+      : 'The order, HP and conditions — the table sees only what you cast.'"
     :breadcrumb="[
       { icon: 'i-lucide-house', to: '/' },
       { label: 'Combat' }
@@ -508,11 +619,6 @@ function hpPercent(combatant: Combatant) {
             @click="undo"
           />
         </UTooltip>
-        <USwitch
-          :model-value="casting"
-          label="Show on display"
-          @update:model-value="toggleCasting"
-        />
         <UButton
           v-if="!state.active"
           label="Start combat"
@@ -553,32 +659,186 @@ function hpPercent(combatant: Combatant) {
       class="space-y-4"
     >
       <!-- Two halves, and which one you're on says so -->
-      <div class="flex w-full max-w-md rounded-xl border border-default p-1">
-        <button
-          v-for="option in VIEWS"
-          :key="option.value"
-          type="button"
-          class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-          :class="view === option.value
-            ? 'bg-primary text-inverted'
-            : 'text-muted hover:text-highlighted'"
-          @click="view = option.value as 'build' | 'play'"
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex w-full max-w-sm rounded-xl border border-default p-1">
+          <button
+            v-for="option in VIEWS"
+            :key="option.value"
+            type="button"
+            class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+            :class="view === option.value
+              ? 'bg-primary text-inverted'
+              : 'text-muted hover:text-highlighted'"
+            @click="view = option.value as 'build' | 'play'"
+          >
+            <UIcon
+              :name="option.icon"
+              class="size-4"
+            />
+            {{ option.label }}
+          </button>
+        </div>
+
+        <UBadge
+          v-if="state.active"
+          color="warning"
+          variant="subtle"
+          class="rounded-full"
         >
-          <UIcon
-            :name="option.icon"
-            class="size-4"
-          />
-          {{ option.label }}
-        </button>
+          Round {{ state.round }} in progress
+        </UBadge>
       </div>
 
-      <div class="grid gap-4 lg:grid-cols-3">
-        <!-- Initiative order -->
+      <!-- ================= PREPARE ================= -->
+      <div
+        v-if="building"
+        class="grid gap-4 lg:grid-cols-3"
+      >
+        <BattleMap
+          class="lg:col-span-2"
+          :combatants="state.combatants"
+          :map-id="state.map_id"
+          :prep="!state.active"
+          @chose="chooseMap"
+          @moved="moveToken"
+        />
+
+        <div class="space-y-4">
+          <ContentCard
+            title="Who's in it"
+            icon="i-lucide-users-round"
+            :description="state.combatants.length
+              ? undefined
+              : 'Both sides of the fight, before the table is watching.'"
+            flush
+          >
+            <template #actions>
+              <UButton
+                label="Add"
+                icon="i-lucide-plus"
+                size="sm"
+                @click="pickerOpen = true"
+              />
+            </template>
+
+            <!-- The party -->
+            <div
+              v-if="party.length"
+              class="border-b border-default"
+            >
+              <p class="px-4 pt-3 pb-1 text-xs font-medium tracking-wide text-dimmed uppercase">
+                The party
+              </p>
+              <div
+                v-for="combatant in party"
+                :key="combatant.id"
+                class="flex items-center gap-2.5 px-4 py-1.5 last:pb-3"
+              >
+                <UAvatar
+                  :src="portraitSrc(combatant)"
+                  :alt="combatant.name"
+                  icon="i-lucide-user-round"
+                  size="sm"
+                />
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-highlighted">
+                  {{ combatant.name }}
+                </span>
+                <span
+                  v-if="combatant.max_hp != null"
+                  class="shrink-0 text-xs tabular-nums text-dimmed"
+                >
+                  {{ combatant.current_hp ?? combatant.max_hp }}/{{ combatant.max_hp }} HP
+                </span>
+                <UButton
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  :aria-label="`Remove ${combatant.name}`"
+                  @click="removeCombatant(combatant.id)"
+                />
+              </div>
+            </div>
+
+            <!-- The opposition -->
+            <div v-if="enemies.length">
+              <p class="px-4 pt-3 pb-1 text-xs font-medium tracking-wide text-dimmed uppercase">
+                Against them
+              </p>
+              <div
+                v-for="line in enemies"
+                :key="line.key"
+                class="flex items-center gap-2.5 px-4 py-1.5 last:pb-3"
+              >
+                <UAvatar
+                  :src="line.entity_id && portraits.urlFor(line.entity_id)
+                    ? mediaUrl(portraits.urlFor(line.entity_id)!) : undefined"
+                  :alt="line.name"
+                  :icon="line.entity_id ? 'i-lucide-skull' : 'i-lucide-shapes'"
+                  size="sm"
+                />
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-highlighted">
+                  {{ line.name }}
+                </span>
+                <span
+                  v-if="line.hp"
+                  class="shrink-0 text-xs tabular-nums text-dimmed"
+                >{{ line.hp }} HP</span>
+
+                <div class="flex shrink-0 items-center gap-1">
+                  <UButton
+                    icon="i-lucide-minus"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :aria-label="`One less ${line.name}`"
+                    @click="line.count > 1 ? removeCopy(line) : removeLine(line)"
+                  />
+                  <span class="w-6 text-center text-sm tabular-nums text-toned">{{ line.count }}</span>
+                  <UButton
+                    icon="i-lucide-plus"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :aria-label="`One more ${line.name}`"
+                    @click="addCopy(line)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="!state.combatants.length"
+              class="px-4 py-6 text-center"
+            >
+              <UButton
+                label="Add the fighters"
+                icon="i-lucide-plus"
+                variant="soft"
+                @click="pickerOpen = true"
+              />
+            </div>
+          </ContentCard>
+
+          <ContentCard
+            title="Dice"
+            icon="i-lucide-dices"
+          >
+            <DiceRoller />
+          </ContentCard>
+        </div>
+      </div>
+
+      <!-- ================= RUN ================= -->
+      <div
+        v-else
+        class="grid gap-4 lg:grid-cols-5"
+      >
         <ContentCard
           class="lg:col-span-2"
-          :title="building ? 'Who\'s in the fight' : `Round ${state.round}`"
+          :title="state.active ? `Round ${state.round}` : 'The order'"
           icon="i-lucide-list-ordered"
-          :description="state.active ? undefined : 'Add combatants, enter initiative rolls, then start.'"
+          :description="state.active ? undefined : 'Roll initiative, then start the fight.'"
           flush
         >
           <template #actions>
@@ -609,31 +869,35 @@ function hpPercent(combatant: Combatant) {
             </template>
           </template>
 
-          <p
+          <div
             v-if="!ordered.length"
-            class="p-6 text-sm text-muted"
+            class="px-4 py-6 text-center"
           >
-            Nobody in the fight yet — add the party and monsters from the right.
-          </p>
+            <p class="mb-3 text-sm text-muted">
+              Nobody in the fight yet.
+            </p>
+            <UButton
+              label="Prepare it first"
+              icon="i-lucide-hammer"
+              variant="soft"
+              @click="view = 'build'"
+            />
+          </div>
 
           <ul v-else>
             <li
               v-for="combatant in ordered"
               :key="combatant.id"
-              class="border-b border-default px-4 py-3 last:border-0 sm:px-5"
+              class="border-b border-default px-3 py-2.5 last:border-0"
               :class="state.active && combatant.id === activeId && 'bg-primary/5 ring-1 ring-inset ring-primary/30'"
             >
-              <div class="flex flex-wrap items-center gap-3">
-                <!-- Only once the fight is running. Before that this screen is
-                   for assembling who's in it, and a column of zeroes to tab
-                   through is noise you have to look past. -->
+              <div class="flex items-center gap-2.5">
                 <UInputNumber
-                  v-if="state.active"
                   :model-value="combatant.initiative"
                   :min="-10"
                   :max="50"
                   size="sm"
-                  class="w-20"
+                  class="w-20 shrink-0"
                   :aria-label="`Initiative for ${combatant.name}`"
                   @update:model-value="value => {
                     snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
@@ -642,55 +906,50 @@ function hpPercent(combatant: Combatant) {
                   }"
                 />
 
-                <UIcon
-                  :name="combatant.kind === 'character' ? 'i-lucide-user-round'
+                <UAvatar
+                  :src="portraitSrc(combatant)"
+                  :alt="combatant.name"
+                  :icon="combatant.kind === 'character' ? 'i-lucide-user-round'
                     : combatant.kind === 'monster' ? 'i-lucide-skull' : 'i-lucide-shapes'"
-                  class="size-4 shrink-0"
-                  :class="combatant.kind === 'monster' ? 'text-error' : 'text-primary'"
+                  size="sm"
+                  class="shrink-0"
+                  :class="[
+                    state.active && combatant.id === activeId && 'ring-2 ring-primary',
+                    combatant.current_hp === 0 && 'opacity-40 grayscale'
+                  ]"
                 />
 
                 <span
-                  class="min-w-0 flex-1 truncate font-medium"
+                  class="min-w-0 flex-1 truncate text-sm font-medium"
                   :class="combatant.current_hp === 0 ? 'text-dimmed line-through' : 'text-highlighted'"
                 >
                   {{ combatant.name }}
                 </span>
 
-                <!-- HP (if tracked) -->
-                <template v-if="combatant.max_hp != null">
-                  <div class="flex items-center gap-1.5">
-                    <UButton
-                      v-for="delta in [-5, -1]"
-                      :key="delta"
-                      :label="String(delta)"
-                      size="xs"
-                      color="error"
-                      variant="soft"
-                      @click="bumpHp(combatant, delta)"
-                    />
-                    <span class="flex items-center gap-1 text-sm tabular-nums text-toned">
-                      <UInputNumber
-                        :model-value="combatant.current_hp ?? combatant.max_hp"
-                        :min="0"
-                        :max="combatant.max_hp"
+                <!-- Conditions live behind one small button, not six on every row -->
+                <UPopover>
+                  <UButton
+                    icon="i-lucide-sparkles"
+                    size="xs"
+                    :color="combatant.conditions.length ? 'warning' : 'neutral'"
+                    :variant="combatant.conditions.length ? 'soft' : 'ghost'"
+                    :aria-label="`Conditions on ${combatant.name}`"
+                  />
+                  <template #content>
+                    <div class="flex max-w-56 flex-wrap gap-1 p-2">
+                      <UButton
+                        v-for="name in QUICK_CONDITIONS"
+                        :key="name"
+                        :label="name"
                         size="xs"
-                        class="w-18"
-                        :aria-label="`${combatant.name} current HP`"
-                        @update:model-value="value => setHp(combatant, value)"
+                        class="capitalize"
+                        :color="combatant.conditions.includes(name) ? 'warning' : 'neutral'"
+                        :variant="combatant.conditions.includes(name) ? 'solid' : 'ghost'"
+                        @click="toggleCondition(combatant, name)"
                       />
-                      <span class="text-muted">/{{ combatant.max_hp }}</span>
-                    </span>
-                    <UButton
-                      v-for="delta in [1, 5]"
-                      :key="delta"
-                      :label="`+${delta}`"
-                      size="xs"
-                      color="success"
-                      variant="soft"
-                      @click="bumpHp(combatant, delta)"
-                    />
-                  </div>
-                </template>
+                    </div>
+                  </template>
+                </UPopover>
 
                 <UButton
                   icon="i-lucide-x"
@@ -702,119 +961,115 @@ function hpPercent(combatant: Combatant) {
                 />
               </div>
 
-              <!-- HP bar + conditions -->
+              <!-- HP on its own line: the row above stays scannable -->
               <div
                 v-if="combatant.max_hp != null || combatant.conditions.length"
-                class="mt-2 flex flex-wrap items-center gap-2 pl-24"
+                class="mt-1.5 flex flex-wrap items-center gap-2 pl-[4.7rem]"
               >
-                <div
-                  v-if="hpPercent(combatant) !== null"
-                  class="h-1.5 w-28 overflow-hidden rounded-full bg-elevated"
-                >
-                  <div
-                    class="h-full rounded-full transition-all"
-                    :class="hpPercent(combatant)! > 50 ? 'bg-emerald-500' : hpPercent(combatant)! > 25 ? 'bg-amber-500' : 'bg-red-500'"
-                    :style="{ width: `${hpPercent(combatant)}%` }"
+                <template v-if="combatant.max_hp != null">
+                  <UButton
+                    v-for="delta in [-5, -1]"
+                    :key="delta"
+                    :label="String(delta)"
+                    size="xs"
+                    color="error"
+                    variant="soft"
+                    @click="bumpHp(combatant, delta)"
                   />
-                </div>
+                  <span class="flex items-center gap-1 text-sm tabular-nums text-toned">
+                    <UInputNumber
+                      :model-value="combatant.current_hp ?? combatant.max_hp"
+                      :min="0"
+                      :max="combatant.max_hp"
+                      size="xs"
+                      class="w-16"
+                      :aria-label="`${combatant.name} current HP`"
+                      @update:model-value="value => setHp(combatant, value)"
+                    />
+                    <span class="text-muted">/{{ combatant.max_hp }}</span>
+                  </span>
+                  <UButton
+                    v-for="delta in [1, 5]"
+                    :key="delta"
+                    :label="`+${delta}`"
+                    size="xs"
+                    color="success"
+                    variant="soft"
+                    @click="bumpHp(combatant, delta)"
+                  />
+                  <div
+                    v-if="hpPercent(combatant) !== null"
+                    class="h-1.5 w-20 overflow-hidden rounded-full bg-elevated"
+                  >
+                    <div
+                      class="h-full rounded-full transition-all"
+                      :class="hpPercent(combatant)! > 50 ? 'bg-emerald-500' : hpPercent(combatant)! > 25 ? 'bg-amber-500' : 'bg-red-500'"
+                      :style="{ width: `${hpPercent(combatant)}%` }"
+                    />
+                  </div>
+                </template>
 
-                <UButton
-                  v-for="name in QUICK_CONDITIONS"
+                <span
+                  v-for="name in combatant.conditions"
                   :key="name"
-                  :label="name"
-                  size="xs"
-                  class="capitalize"
-                  :color="combatant.conditions.includes(name) ? 'warning' : 'neutral'"
-                  :variant="combatant.conditions.includes(name) ? 'solid' : 'ghost'"
-                  @click="toggleCondition(combatant, name)"
-                />
+                  class="rounded-full bg-warning/15 px-2 py-0.5 text-xs capitalize text-warning"
+                >
+                  {{ name }}
+                </span>
               </div>
             </li>
           </ul>
+
+          <!-- Reinforcements arrive without leaving the fight -->
+          <div
+            v-if="ordered.length"
+            class="border-t border-default p-2"
+          >
+            <UButton
+              label="Reinforcements"
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              block
+              @click="pickerOpen = true"
+            />
+          </div>
         </ContentCard>
 
-        <BattleMap
-          class="lg:col-span-2"
-          :combatants="state.combatants"
-          :map-id="state.map_id"
-          @chose="chooseMap"
-          @moved="moveToken"
-        />
-
-        <!-- Assembling the fight -->
-        <div class="space-y-4">
-          <ContentCard
-            v-if="showAdders"
-            title="The party"
-            icon="i-lucide-users-round"
-          >
-            <div class="flex flex-wrap gap-1.5">
-              <UButton
-                v-for="character in characters"
-                :key="character.id"
-                :label="character.name"
-                icon="i-lucide-plus"
-                size="sm"
-                color="neutral"
-                variant="outline"
-                :disabled="state.combatants.some(c => c.entity_id === character.id)"
-                @click="addCharacter(character)"
+        <div class="space-y-4 lg:col-span-3">
+          <!-- What the table sees, in one place -->
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-default px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-sm font-medium text-highlighted">
+              <UIcon
+                name="i-lucide-cast"
+                class="size-4 text-primary"
               />
-            </div>
-            <p
-              v-if="!characters.length"
-              class="text-sm text-muted"
-            >
-              No characters in the campaign yet.
-            </p>
-          </ContentCard>
+              On the wall
+            </span>
+            <USwitch
+              :model-value="stripUp"
+              label="Order above everything"
+              :disabled="!ordered.length"
+              @update:model-value="toggleStrip"
+            />
+            <UButton
+              :label="fullOrderUp ? 'Order is full screen' : 'Order full screen'"
+              icon="i-lucide-monitor"
+              size="sm"
+              :color="fullOrderUp ? 'primary' : 'neutral'"
+              :variant="fullOrderUp ? 'solid' : 'outline'"
+              :disabled="!ordered.length"
+              @click="castFullOrder(true)"
+            />
+          </div>
 
-          <ContentCard
-            v-if="showAdders"
-            title="Monsters"
-            icon="i-lucide-skull"
-            description="Click again for another copy — they number themselves."
-          >
-            <div class="space-y-2">
-              <!-- A campaign accumulates a bestiary; a wall of buttons stops
-                 being findable somewhere around thirty of them -->
-              <UInput
-                v-model="monsterQuery"
-                icon="i-lucide-search"
-                placeholder="Goblin, wolf, cultist…"
-                size="sm"
-                class="w-full"
-              />
-              <div class="flex flex-wrap gap-1.5">
-                <UButton
-                  v-for="monster in shownMonsters"
-                  :key="monster.id"
-                  :label="monster.name"
-                  icon="i-lucide-plus"
-                  size="sm"
-                  color="neutral"
-                  variant="outline"
-                  @click="addMonster(monster)"
-                />
-              </div>
-              <p
-                v-if="monsterQuery.trim() && !shownMonsters.length"
-                class="text-sm text-muted"
-              >
-                Nothing matches “{{ monsterQuery }}”.
-              </p>
-            </div>
-            <p
-              v-if="!monsters.length"
-              class="text-sm text-muted"
-            >
-              No statblocks yet —
-              <NuxtLink
-                to="/entities/new?type=monster"
-                class="font-medium text-primary"
-              >create one</NuxtLink>.
-            </p>
-          </ContentCard>
+          <BattleMap
+            :combatants="state.combatants"
+            :map-id="state.map_id"
+            @chose="chooseMap"
+            @moved="moveToken"
+          />
 
           <ContentCard
             title="Dice"
@@ -822,32 +1077,16 @@ function hpPercent(combatant: Combatant) {
           >
             <DiceRoller />
           </ContentCard>
-
-          <ContentCard
-            v-if="showAdders"
-            title="Anything else"
-            icon="i-lucide-shapes"
-            description="A trap, lair action, a summoned wolf — no statblock needed."
-          >
-            <form
-              class="flex gap-2"
-              @submit.prevent="addCustom"
-            >
-              <UInput
-                v-model="customName"
-                placeholder="Swinging blade trap"
-                class="flex-1"
-              />
-              <UButton
-                type="submit"
-                icon="i-lucide-plus"
-                :disabled="!customName.trim()"
-                aria-label="Add"
-              />
-            </form>
-          </ContentCard>
         </div>
       </div>
     </div>
+
+    <CombatantPicker
+      v-model:open="pickerOpen"
+      :taken-entity-ids="takenEntityIds"
+      @character="addCharacter"
+      @monster="addMonster"
+      @custom="addCustom"
+    />
   </AppPage>
 </template>
