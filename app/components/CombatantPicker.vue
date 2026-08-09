@@ -11,6 +11,11 @@
 const props = defineProps<{
   /** Who's already in, so the party rows can say so instead of duplicating */
   takenEntityIds: string[]
+  /**
+   * An encounter is prepped without the party — they join on their own the
+   * moment it runs, so offering them here would only create duplicates.
+   */
+  hideParty?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,9 +58,11 @@ watch(open, (isOpen) => {
   query.value = ''
   customName.value = ''
   search()
-  entities.list({ type: 'character', page_size: 50 }).then((page) => {
-    characters.value = page.items
-  })
+  if (!props.hideParty) {
+    entities.list({ type: 'character', page_size: 50 }).then((page) => {
+      characters.value = page.items
+    })
+  }
 })
 
 onBeforeUnmount(() => clearTimeout(searchTimer))
@@ -84,13 +91,15 @@ function addCustom() {
   <UModal
     v-model:open="open"
     title="Add to the fight"
-    description="The party joins with a click; monsters are searched. Same monster again means one more of them."
+    :description="hideParty
+      ? 'The party joins on its own when this runs. Same monster again means one more of them.'
+      : 'The party joins with a click; monsters are searched. Same monster again means one more of them.'"
     :ui="{ content: 'max-w-lg' }"
   >
     <template #body>
       <div class="space-y-4">
         <!-- The party -->
-        <div v-if="characters.length">
+        <div v-if="!hideParty && characters.length">
           <div class="mb-1.5 flex items-center justify-between">
             <p class="text-xs font-medium tracking-wide text-dimmed uppercase">
               The party

@@ -24,6 +24,8 @@ const { confirm } = useConfirm()
 const entities = useEntities()
 const combat = useCombat()
 const cast = useCast()
+const portraits = usePortraits()
+const mediaUrl = useMediaUrl()
 
 interface RosterLine {
   id: string
@@ -40,6 +42,13 @@ const roster = ref<RosterLine[]>(
 
 /** Which map the fight is prepped on */
 const mapId = ref<string | null>((props.entity.data.map_id as string | null) ?? null)
+
+// Faces for the roster rows, from the same cache the board draws on
+watch(
+  () => roster.value.map(line => line.entity_id).join(','),
+  () => portraits.ensure(roster.value.map(line => line.entity_id)),
+  { immediate: true }
+)
 
 /**
  * Where each copy starts, keyed by line and copy number.
@@ -104,32 +113,17 @@ function persist() {
 
 onBeforeUnmount(() => clearTimeout(saveTimer))
 
-/* --- Adding ---------------------------------------------------------------- */
+/* --- Adding ----------------------------------------------------------------
+ * The same picker the combat screen uses, minus the party — they join on
+ * their own the moment the encounter runs. It stays open after an add, since
+ * assembling an ambush is five adds in a row, not one.
+ */
 
-const picker = reactive({ open: false, query: '', results: [] as EntitySummary[] })
-const customName = ref('')
-
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-
-watch(() => picker.query, (q) => {
-  clearTimeout(searchTimer)
-
-  if (!q.trim()) {
-    picker.results = []
-    return
-  }
-
-  searchTimer = setTimeout(async () => {
-    const page = await entities.list({ type: 'monster', q: q.trim(), page_size: 10 })
-    picker.results = page.items
-  }, 250)
-})
-
-onBeforeUnmount(() => clearTimeout(searchTimer))
+const pickerOpen = ref(false)
 
 const lineId = () => Math.random().toString(36).slice(2, 10)
 
-async function addMonster(monster: EntitySummary) {
+function addMonster(monster: EntitySummary) {
   const existing = roster.value.find(line => line.entity_id === monster.id)
 
   // Adding the same monster twice means "one more of them", not a second line
@@ -145,19 +139,11 @@ async function addMonster(monster: EntitySummary) {
     })
   }
 
-  picker.open = false
-  picker.query = ''
   persist()
 }
 
-async function addCustom() {
-  const name = customName.value.trim()
-  if (!name) {
-    return
-  }
+function addCustom(name: string) {
   roster.value.push({ id: lineId(), entity_id: null, name, count: 1, hp: null })
-  customName.value = ''
-  picker.open = false
   persist()
 }
 
@@ -352,7 +338,7 @@ async function run() {
           color="neutral"
           variant="outline"
           size="sm"
-          @click="picker.open = true"
+          @click="pickerOpen = true"
         />
         <UButton
           v-if="roster.length && canEdit"
@@ -373,9 +359,13 @@ async function run() {
           :key="line.id"
           class="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
         >
-          <UIcon
-            :name="line.entity_id ? 'i-lucide-skull' : 'i-lucide-user'"
-            class="size-4 shrink-0 text-dimmed"
+          <UAvatar
+            :src="line.entity_id && portraits.urlFor(line.entity_id)
+              ? mediaUrl(portraits.urlFor(line.entity_id)!) : undefined"
+            :alt="line.name"
+            :icon="line.entity_id ? 'i-lucide-skull' : 'i-lucide-shapes'"
+            size="sm"
+            class="shrink-0"
           />
 
           <NuxtLink
@@ -429,65 +419,13 @@ async function run() {
         Nothing here yet.
       </p>
 
-      <UModal
-        v-model:open="picker.open"
-        title="Add to the fight"
-        description="Anything from the bestiary, or a name of your own."
-        :ui="{ content: 'max-w-md' }"
-      >
-        <template #body>
-          <div class="space-y-3">
-            <UInput
-              v-model="picker.query"
-              icon="i-lucide-search"
-              placeholder="Goblin, wolf, cultist…"
-              autofocus
-              class="w-full"
-            />
-
-            <div
-              v-if="picker.results.length"
-              class="space-y-1"
-            >
-              <button
-                v-for="hit in picker.results"
-                :key="hit.id"
-                type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
-                @click="addMonster(hit)"
-              >
-                <UIcon
-                  name="i-lucide-skull"
-                  class="size-4 shrink-0"
-                />
-                <span class="truncate">{{ hit.name }}</span>
-                <span
-                  v-if="hit.data.cr"
-                  class="ml-auto shrink-0 text-xs text-dimmed"
-                >CR {{ hit.data.cr }}</span>
-              </button>
-            </div>
-
-            <USeparator label="or" />
-
-            <div class="flex gap-2">
-              <UInput
-                v-model="customName"
-                placeholder="Bandit captain"
-                class="flex-1"
-                @keydown.enter.prevent="addCustom"
-              />
-              <UButton
-                label="Add"
-                color="neutral"
-                variant="outline"
-                :disabled="!customName.trim()"
-                @click="addCustom"
-              />
-            </div>
-          </div>
-        </template>
-      </UModal>
+      <CombatantPicker
+        v-model:open="pickerOpen"
+        :taken-entity-ids="[]"
+        hide-party
+        @monster="addMonster"
+        @custom="addCustom"
+      />
     </ContentCard>
 
     <!-- Same board as the fight, minus the button that puts it on the wall -->
