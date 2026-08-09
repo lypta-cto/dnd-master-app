@@ -167,6 +167,44 @@ const dragging = ref<string | null>(null)
 
 /** Placed tokens draw on the map; the rest wait in the tray below it */
 const placed = computed(() => props.combatants.filter(c => c.x != null && c.y != null))
+
+/**
+ * Creatures standing in the same place, fanned apart so you can see them all.
+ *
+ * Four things in one square is normal — a swarm, a pile-up in a doorway — and
+ * stacked tokens hid each other and put four labels on top of one another.
+ * The nudge is in pixels and purely visual: the stored position stays exactly
+ * where the DM put it, so distances and the cast payload are unaffected.
+ */
+const SPREAD_THRESHOLD = 3
+const SPREAD_RADIUS = 15
+
+const laidOut = computed(() => {
+  const buckets = new Map<string, Combatant[]>()
+
+  for (const token of placed.value) {
+    // Rounded to the threshold, so "near enough to overlap" lands together
+    const key = `${Math.round(token.x! / SPREAD_THRESHOLD)}:${Math.round(token.y! / SPREAD_THRESHOLD)}`
+    buckets.set(key, [...(buckets.get(key) ?? []), token])
+  }
+
+  return [...buckets.values()].flatMap(group =>
+    group.map((token, index) => {
+      if (group.length === 1) {
+        return { token, dx: 0, dy: 0 }
+      }
+
+      // Evenly around a small circle, starting at the top so a pair reads as
+      // one above the other rather than at some arbitrary tilt
+      const angle = (index / group.length) * Math.PI * 2 - Math.PI / 2
+      return {
+        token,
+        dx: Math.cos(angle) * SPREAD_RADIUS,
+        dy: Math.sin(angle) * SPREAD_RADIUS
+      }
+    })
+  )
+})
 const unplaced = computed(() => props.combatants.filter(c => c.x == null || c.y == null))
 
 function pointAt(event: PointerEvent) {
@@ -323,9 +361,13 @@ async function castBattle() {
         // Only what's on the board, and only what the party may know: a
         // monster's remaining HP is the DM's business, so tokens carry a name
         // and a side and nothing else.
-        tokens: placed.value.map(c => ({
+        tokens: laidOut.value.map(({ token: c, dx, dy }) => ({
           x: c.x,
           y: c.y,
+          // The visual nudge travels with them, or the same pile-up that was
+          // untangled here would be stacked again on the wall
+          dx,
+          dy,
           label: c.name,
           kind: c.kind,
           down: c.current_hp === 0,
@@ -530,10 +572,10 @@ defineExpose({ castBattle })
         />
 
         <button
-          v-for="token in placed"
+          v-for="{ token, dx, dy } in laidOut"
           :key="token.id"
           type="button"
-          class="absolute flex size-8 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-lg active:cursor-grabbing"
+          class="absolute flex size-8 cursor-grab items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-lg active:cursor-grabbing"
           :class="[
             token.kind === 'character'
               ? 'border-white/80 bg-primary text-inverted'
@@ -541,7 +583,11 @@ defineExpose({ castBattle })
             token.current_hp === 0 && 'opacity-40 grayscale',
             dragging === token.id && 'scale-110 ring-2 ring-white'
           ]"
-          :style="{ left: `${token.x}%`, top: `${token.y}%` }"
+          :style="{
+            left: `${token.x}%`,
+            top: `${token.y}%`,
+            transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)`
+          }"
           :title="token.name"
           @pointerdown="startDrag($event, token.id)"
         >

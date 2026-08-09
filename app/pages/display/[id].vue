@@ -298,7 +298,11 @@ useHead({ title: 'Display' })
               piece.kind === 'character' ? 'display-token-party' : 'display-token-foe',
               piece.down && 'display-token-down'
             ]"
-            :style="{ left: `${piece.x}%`, top: `${piece.y}%` }"
+            :style="{
+              left: `${piece.x}%`,
+              top: `${piece.y}%`,
+              transform: `translate(-50%, -50%) translate(${piece.dx ?? 0}px, ${piece.dy ?? 0}px)`
+            }"
           >
             <img
               v-if="piece.image_url"
@@ -599,7 +603,6 @@ useHead({ title: 'Display' })
 
 .display-token {
   position: absolute;
-  transform: translate(-50%, -50%);
   width: 2.4rem;
   height: 2.4rem;
   border-radius: 999px;

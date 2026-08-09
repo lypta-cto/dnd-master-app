@@ -42,14 +42,34 @@ const monsterQuery = ref('')
  * fight, and the thing you actually needed mid-combat was the smaller half of
  * the screen.
  */
-const building = computed(() => !state.value.active)
-
 /**
- * Reinforcements are real, so adding never disappears — it just stops taking
- * the room during a fight.
+ * Which half of the screen you're on, chosen rather than inferred.
+ *
+ * This was inferred from whether the fight had started, which meant the split
+ * was invisible: the page quietly rearranged itself and looked like the same
+ * one screen it had always been. It's a switch you press now, and it says
+ * which half you're in.
+ *
+ * Independent of `active` on purpose — flipping back to Build mid-fight is how
+ * reinforcements arrive, and must not end the fight to do it.
  */
-const addersOpen = ref(false)
-const showAdders = computed(() => building.value || addersOpen.value)
+const view = ref<'build' | 'play'>('build')
+
+const building = computed(() => view.value === 'build')
+
+const VIEWS = [
+  { label: 'Build the fight', value: 'build', icon: 'i-lucide-users-round' },
+  { label: 'Play it out', value: 'play', icon: 'i-lucide-swords' }
+]
+
+// A fight already running belongs on the play half the moment the page opens
+watch(() => state.value.active, (active) => {
+  if (active) {
+    view.value = 'play'
+  }
+})
+
+const showAdders = computed(() => building.value)
 
 const shownMonsters = computed(() => {
   const needle = fold(monsterQuery.value.trim())
@@ -530,292 +550,303 @@ function hpPercent(combatant: Combatant) {
 
     <div
       v-else
-      class="grid gap-4 lg:grid-cols-3"
+      class="space-y-4"
     >
-      <!-- Initiative order -->
-      <ContentCard
-        class="lg:col-span-2"
-        :title="state.active ? `Round ${state.round}` : 'Initiative order'"
-        icon="i-lucide-list-ordered"
-        :description="state.active ? undefined : 'Add combatants, enter initiative rolls, then start.'"
-        flush
-      >
-        <template #actions>
-          <UButton
-            v-if="state.combatants.some(c => c.initiative === 0)"
-            label="Roll the rest"
-            icon="i-lucide-dices"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            @click="rollMissingInitiative"
+      <!-- Two halves, and which one you're on says so -->
+      <div class="flex w-full max-w-md rounded-xl border border-default p-1">
+        <button
+          v-for="option in VIEWS"
+          :key="option.value"
+          type="button"
+          class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          :class="view === option.value
+            ? 'bg-primary text-inverted'
+            : 'text-muted hover:text-highlighted'"
+          @click="view = option.value as 'build' | 'play'"
+        >
+          <UIcon
+            :name="option.icon"
+            class="size-4"
           />
-          <template v-if="state.active">
+          {{ option.label }}
+        </button>
+      </div>
+
+      <div class="grid gap-4 lg:grid-cols-3">
+        <!-- Initiative order -->
+        <ContentCard
+          class="lg:col-span-2"
+          :title="building ? 'Who\'s in the fight' : `Round ${state.round}`"
+          icon="i-lucide-list-ordered"
+          :description="state.active ? undefined : 'Add combatants, enter initiative rolls, then start.'"
+          flush
+        >
+          <template #actions>
             <UButton
-              icon="i-lucide-skip-back"
+              v-if="state.combatants.some(c => c.initiative === 0)"
+              label="Roll the rest"
+              icon="i-lucide-dices"
               color="neutral"
               variant="outline"
               size="sm"
-              aria-label="Previous turn"
-              @click="previousTurn"
+              @click="rollMissingInitiative"
             />
-            <UButton
-              label="Next turn"
-              trailing-icon="i-lucide-skip-forward"
-              size="sm"
-              @click="nextTurn"
-            />
+            <template v-if="state.active">
+              <UButton
+                icon="i-lucide-skip-back"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                aria-label="Previous turn"
+                @click="previousTurn"
+              />
+              <UButton
+                label="Next turn"
+                trailing-icon="i-lucide-skip-forward"
+                size="sm"
+                @click="nextTurn"
+              />
+            </template>
           </template>
-        </template>
 
-        <p
-          v-if="!ordered.length"
-          class="p-6 text-sm text-muted"
-        >
-          Nobody in the fight yet — add the party and monsters from the right.
-        </p>
-
-        <ul v-else>
-          <li
-            v-for="combatant in ordered"
-            :key="combatant.id"
-            class="border-b border-default px-4 py-3 last:border-0 sm:px-5"
-            :class="state.active && combatant.id === activeId && 'bg-primary/5 ring-1 ring-inset ring-primary/30'"
+          <p
+            v-if="!ordered.length"
+            class="p-6 text-sm text-muted"
           >
-            <div class="flex flex-wrap items-center gap-3">
-              <!-- Only once the fight is running. Before that this screen is
+            Nobody in the fight yet — add the party and monsters from the right.
+          </p>
+
+          <ul v-else>
+            <li
+              v-for="combatant in ordered"
+              :key="combatant.id"
+              class="border-b border-default px-4 py-3 last:border-0 sm:px-5"
+              :class="state.active && combatant.id === activeId && 'bg-primary/5 ring-1 ring-inset ring-primary/30'"
+            >
+              <div class="flex flex-wrap items-center gap-3">
+                <!-- Only once the fight is running. Before that this screen is
                    for assembling who's in it, and a column of zeroes to tab
                    through is noise you have to look past. -->
-              <UInputNumber
-                v-if="state.active"
-                :model-value="combatant.initiative"
-                :min="-10"
-                :max="50"
-                size="sm"
-                class="w-20"
-                :aria-label="`Initiative for ${combatant.name}`"
-                @update:model-value="value => {
-                  snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
-                  combatant.initiative = value ?? 0
-                  queueSave()
-                }"
-              />
+                <UInputNumber
+                  v-if="state.active"
+                  :model-value="combatant.initiative"
+                  :min="-10"
+                  :max="50"
+                  size="sm"
+                  class="w-20"
+                  :aria-label="`Initiative for ${combatant.name}`"
+                  @update:model-value="value => {
+                    snapshot(`initiative for ${combatant.name}`, `init:${combatant.id}`)
+                    combatant.initiative = value ?? 0
+                    queueSave()
+                  }"
+                />
 
-              <UIcon
-                :name="combatant.kind === 'character' ? 'i-lucide-user-round'
-                  : combatant.kind === 'monster' ? 'i-lucide-skull' : 'i-lucide-shapes'"
-                class="size-4 shrink-0"
-                :class="combatant.kind === 'monster' ? 'text-error' : 'text-primary'"
-              />
+                <UIcon
+                  :name="combatant.kind === 'character' ? 'i-lucide-user-round'
+                    : combatant.kind === 'monster' ? 'i-lucide-skull' : 'i-lucide-shapes'"
+                  class="size-4 shrink-0"
+                  :class="combatant.kind === 'monster' ? 'text-error' : 'text-primary'"
+                />
 
-              <span
-                class="min-w-0 flex-1 truncate font-medium"
-                :class="combatant.current_hp === 0 ? 'text-dimmed line-through' : 'text-highlighted'"
-              >
-                {{ combatant.name }}
-              </span>
+                <span
+                  class="min-w-0 flex-1 truncate font-medium"
+                  :class="combatant.current_hp === 0 ? 'text-dimmed line-through' : 'text-highlighted'"
+                >
+                  {{ combatant.name }}
+                </span>
 
-              <!-- HP (if tracked) -->
-              <template v-if="combatant.max_hp != null">
-                <div class="flex items-center gap-1.5">
-                  <UButton
-                    v-for="delta in [-5, -1]"
-                    :key="delta"
-                    :label="String(delta)"
-                    size="xs"
-                    color="error"
-                    variant="soft"
-                    @click="bumpHp(combatant, delta)"
-                  />
-                  <span class="flex items-center gap-1 text-sm tabular-nums text-toned">
-                    <UInputNumber
-                      :model-value="combatant.current_hp ?? combatant.max_hp"
-                      :min="0"
-                      :max="combatant.max_hp"
+                <!-- HP (if tracked) -->
+                <template v-if="combatant.max_hp != null">
+                  <div class="flex items-center gap-1.5">
+                    <UButton
+                      v-for="delta in [-5, -1]"
+                      :key="delta"
+                      :label="String(delta)"
                       size="xs"
-                      class="w-18"
-                      :aria-label="`${combatant.name} current HP`"
-                      @update:model-value="value => setHp(combatant, value)"
+                      color="error"
+                      variant="soft"
+                      @click="bumpHp(combatant, delta)"
                     />
-                    <span class="text-muted">/{{ combatant.max_hp }}</span>
-                  </span>
-                  <UButton
-                    v-for="delta in [1, 5]"
-                    :key="delta"
-                    :label="`+${delta}`"
-                    size="xs"
-                    color="success"
-                    variant="soft"
-                    @click="bumpHp(combatant, delta)"
-                  />
-                </div>
-              </template>
+                    <span class="flex items-center gap-1 text-sm tabular-nums text-toned">
+                      <UInputNumber
+                        :model-value="combatant.current_hp ?? combatant.max_hp"
+                        :min="0"
+                        :max="combatant.max_hp"
+                        size="xs"
+                        class="w-18"
+                        :aria-label="`${combatant.name} current HP`"
+                        @update:model-value="value => setHp(combatant, value)"
+                      />
+                      <span class="text-muted">/{{ combatant.max_hp }}</span>
+                    </span>
+                    <UButton
+                      v-for="delta in [1, 5]"
+                      :key="delta"
+                      :label="`+${delta}`"
+                      size="xs"
+                      color="success"
+                      variant="soft"
+                      @click="bumpHp(combatant, delta)"
+                    />
+                  </div>
+                </template>
 
-              <UButton
-                icon="i-lucide-x"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                :aria-label="`Remove ${combatant.name}`"
-                @click="removeCombatant(combatant.id)"
-              />
-            </div>
-
-            <!-- HP bar + conditions -->
-            <div
-              v-if="combatant.max_hp != null || combatant.conditions.length"
-              class="mt-2 flex flex-wrap items-center gap-2 pl-24"
-            >
-              <div
-                v-if="hpPercent(combatant) !== null"
-                class="h-1.5 w-28 overflow-hidden rounded-full bg-elevated"
-              >
-                <div
-                  class="h-full rounded-full transition-all"
-                  :class="hpPercent(combatant)! > 50 ? 'bg-emerald-500' : hpPercent(combatant)! > 25 ? 'bg-amber-500' : 'bg-red-500'"
-                  :style="{ width: `${hpPercent(combatant)}%` }"
+                <UButton
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  :aria-label="`Remove ${combatant.name}`"
+                  @click="removeCombatant(combatant.id)"
                 />
               </div>
 
-              <UButton
-                v-for="name in QUICK_CONDITIONS"
-                :key="name"
-                :label="name"
-                size="xs"
-                class="capitalize"
-                :color="combatant.conditions.includes(name) ? 'warning' : 'neutral'"
-                :variant="combatant.conditions.includes(name) ? 'solid' : 'ghost'"
-                @click="toggleCondition(combatant, name)"
-              />
-            </div>
-          </li>
-        </ul>
-      </ContentCard>
+              <!-- HP bar + conditions -->
+              <div
+                v-if="combatant.max_hp != null || combatant.conditions.length"
+                class="mt-2 flex flex-wrap items-center gap-2 pl-24"
+              >
+                <div
+                  v-if="hpPercent(combatant) !== null"
+                  class="h-1.5 w-28 overflow-hidden rounded-full bg-elevated"
+                >
+                  <div
+                    class="h-full rounded-full transition-all"
+                    :class="hpPercent(combatant)! > 50 ? 'bg-emerald-500' : hpPercent(combatant)! > 25 ? 'bg-amber-500' : 'bg-red-500'"
+                    :style="{ width: `${hpPercent(combatant)}%` }"
+                  />
+                </div>
 
-      <BattleMap
-        class="lg:col-span-2"
-        :combatants="state.combatants"
-        :map-id="state.map_id"
-        @chose="chooseMap"
-        @moved="moveToken"
-      />
-
-      <!-- Assembling the fight -->
-      <div class="space-y-4">
-        <UButton
-          v-if="!building"
-          :label="addersOpen ? 'Done adding' : 'Add someone'"
-          :icon="addersOpen ? 'i-lucide-check' : 'i-lucide-user-plus'"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          block
-          @click="addersOpen = !addersOpen"
-        />
-
-        <ContentCard
-          v-if="showAdders"
-          title="The party"
-          icon="i-lucide-users-round"
-        >
-          <div class="flex flex-wrap gap-1.5">
-            <UButton
-              v-for="character in characters"
-              :key="character.id"
-              :label="character.name"
-              icon="i-lucide-plus"
-              size="sm"
-              color="neutral"
-              variant="outline"
-              :disabled="state.combatants.some(c => c.entity_id === character.id)"
-              @click="addCharacter(character)"
-            />
-          </div>
-          <p
-            v-if="!characters.length"
-            class="text-sm text-muted"
-          >
-            No characters in the campaign yet.
-          </p>
+                <UButton
+                  v-for="name in QUICK_CONDITIONS"
+                  :key="name"
+                  :label="name"
+                  size="xs"
+                  class="capitalize"
+                  :color="combatant.conditions.includes(name) ? 'warning' : 'neutral'"
+                  :variant="combatant.conditions.includes(name) ? 'solid' : 'ghost'"
+                  @click="toggleCondition(combatant, name)"
+                />
+              </div>
+            </li>
+          </ul>
         </ContentCard>
 
-        <ContentCard
-          v-if="showAdders"
-          title="Monsters"
-          icon="i-lucide-skull"
-          description="Click again for another copy — they number themselves."
-        >
-          <div class="space-y-2">
-            <!-- A campaign accumulates a bestiary; a wall of buttons stops
-                 being findable somewhere around thirty of them -->
-            <UInput
-              v-model="monsterQuery"
-              icon="i-lucide-search"
-              placeholder="Goblin, wolf, cultist…"
-              size="sm"
-              class="w-full"
-            />
+        <BattleMap
+          class="lg:col-span-2"
+          :combatants="state.combatants"
+          :map-id="state.map_id"
+          @chose="chooseMap"
+          @moved="moveToken"
+        />
+
+        <!-- Assembling the fight -->
+        <div class="space-y-4">
+          <ContentCard
+            v-if="showAdders"
+            title="The party"
+            icon="i-lucide-users-round"
+          >
             <div class="flex flex-wrap gap-1.5">
               <UButton
-                v-for="monster in shownMonsters"
-                :key="monster.id"
-                :label="monster.name"
+                v-for="character in characters"
+                :key="character.id"
+                :label="character.name"
                 icon="i-lucide-plus"
                 size="sm"
                 color="neutral"
                 variant="outline"
-                @click="addMonster(monster)"
+                :disabled="state.combatants.some(c => c.entity_id === character.id)"
+                @click="addCharacter(character)"
               />
             </div>
             <p
-              v-if="monsterQuery.trim() && !shownMonsters.length"
+              v-if="!characters.length"
               class="text-sm text-muted"
             >
-              Nothing matches “{{ monsterQuery }}”.
+              No characters in the campaign yet.
             </p>
-          </div>
-          <p
-            v-if="!monsters.length"
-            class="text-sm text-muted"
-          >
-            No statblocks yet —
-            <NuxtLink
-              to="/entities/new?type=monster"
-              class="font-medium text-primary"
-            >create one</NuxtLink>.
-          </p>
-        </ContentCard>
+          </ContentCard>
 
-        <ContentCard
-          title="Dice"
-          icon="i-lucide-dices"
-        >
-          <DiceRoller />
-        </ContentCard>
-
-        <ContentCard
-          v-if="showAdders"
-          title="Anything else"
-          icon="i-lucide-shapes"
-          description="A trap, lair action, a summoned wolf — no statblock needed."
-        >
-          <form
-            class="flex gap-2"
-            @submit.prevent="addCustom"
+          <ContentCard
+            v-if="showAdders"
+            title="Monsters"
+            icon="i-lucide-skull"
+            description="Click again for another copy — they number themselves."
           >
-            <UInput
-              v-model="customName"
-              placeholder="Swinging blade trap"
-              class="flex-1"
-            />
-            <UButton
-              type="submit"
-              icon="i-lucide-plus"
-              :disabled="!customName.trim()"
-              aria-label="Add"
-            />
-          </form>
-        </ContentCard>
+            <div class="space-y-2">
+              <!-- A campaign accumulates a bestiary; a wall of buttons stops
+                 being findable somewhere around thirty of them -->
+              <UInput
+                v-model="monsterQuery"
+                icon="i-lucide-search"
+                placeholder="Goblin, wolf, cultist…"
+                size="sm"
+                class="w-full"
+              />
+              <div class="flex flex-wrap gap-1.5">
+                <UButton
+                  v-for="monster in shownMonsters"
+                  :key="monster.id"
+                  :label="monster.name"
+                  icon="i-lucide-plus"
+                  size="sm"
+                  color="neutral"
+                  variant="outline"
+                  @click="addMonster(monster)"
+                />
+              </div>
+              <p
+                v-if="monsterQuery.trim() && !shownMonsters.length"
+                class="text-sm text-muted"
+              >
+                Nothing matches “{{ monsterQuery }}”.
+              </p>
+            </div>
+            <p
+              v-if="!monsters.length"
+              class="text-sm text-muted"
+            >
+              No statblocks yet —
+              <NuxtLink
+                to="/entities/new?type=monster"
+                class="font-medium text-primary"
+              >create one</NuxtLink>.
+            </p>
+          </ContentCard>
+
+          <ContentCard
+            title="Dice"
+            icon="i-lucide-dices"
+          >
+            <DiceRoller />
+          </ContentCard>
+
+          <ContentCard
+            v-if="showAdders"
+            title="Anything else"
+            icon="i-lucide-shapes"
+            description="A trap, lair action, a summoned wolf — no statblock needed."
+          >
+            <form
+              class="flex gap-2"
+              @submit.prevent="addCustom"
+            >
+              <UInput
+                v-model="customName"
+                placeholder="Swinging blade trap"
+                class="flex-1"
+              />
+              <UButton
+                type="submit"
+                icon="i-lucide-plus"
+                :disabled="!customName.trim()"
+                aria-label="Add"
+              />
+            </form>
+          </ContentCard>
+        </div>
       </div>
     </div>
   </AppPage>
