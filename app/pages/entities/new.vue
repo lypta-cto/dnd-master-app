@@ -54,7 +54,8 @@ async function onSaved(entity: EntityDetail) {
       />
     </template>
 
-    <ContentCard class="max-w-5xl">
+    <!-- The whole width: a world-building form shouldn't feel like a popup -->
+    <ContentCard>
       <!-- Re-key on type so switching resets defaults cleanly -->
       <EntityForm
         :key="type"

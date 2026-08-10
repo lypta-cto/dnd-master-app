@@ -166,6 +166,12 @@ const KIND_ICONS: Record<string, string> = {
 const kindIcon = (place: EntitySummary) =>
   KIND_ICONS[String(place.data.kind ?? '')] ?? 'i-lucide-map-pin'
 
+/** The add-a-place dialog, aimed at wherever the DM is standing */
+const addPlaceOpen = ref(false)
+
+/** For rows that are links rather than drills */
+const NuxtLinkComponent = resolveComponent('NuxtLink')
+
 /** Where the DM is standing, carried in the URL so "back" walks back up */
 const standingIn = computed(() => {
   const id = route.query.in
@@ -577,8 +583,17 @@ watch([type, () => current.value?.id], () => {
           v-if="explorer"
           class="space-y-4"
         >
-          <!-- The path back up, rung by rung -->
+          <!-- The path back up, rung by rung — and the way to grow the tier
+             you're standing in without leaving it -->
           <div class="flex flex-wrap items-center gap-1 text-sm">
+            <UButton
+              v-if="isDm"
+              label="Add a place"
+              icon="i-lucide-map-pin-plus"
+              size="xs"
+              class="order-last ml-auto"
+              @click="addPlaceOpen = true"
+            />
             <button
               type="button"
               class="flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium transition-colors"
@@ -683,10 +698,11 @@ watch([type, () => current.value?.id], () => {
                 :key="place.id"
                 class="flex items-center border-b border-default transition-colors last:border-0 hover:bg-elevated/60"
               >
-                <button
-                  type="button"
+                <component
+                  :is="inside ? 'button' : NuxtLinkComponent"
+                  v-bind="inside ? { type: 'button' } : { to: `/entities/${place.id}` }"
                   class="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
-                  @click="stepInto(place.id)"
+                  @click="inside ? stepInto(place.id) : undefined"
                 >
                   <img
                     v-if="place.image_url"
@@ -721,11 +737,12 @@ watch([type, () => current.value?.id], () => {
                     {{ inside }} {{ inside === 1 ? 'place' : 'places' }} inside
                   </span>
                   <UIcon
-                    name="i-lucide-chevron-right"
+                    :name="inside ? 'i-lucide-chevron-right' : 'i-lucide-arrow-up-right'"
                     class="size-4 shrink-0 text-dimmed"
                   />
-                </button>
+                </component>
                 <NuxtLink
+                  v-if="inside"
                   :to="`/entities/${place.id}`"
                   class="shrink-0 p-3 text-dimmed transition-colors hover:text-primary"
                   :aria-label="`Open ${place.name}`"
@@ -749,11 +766,19 @@ watch([type, () => current.value?.id], () => {
               : 'Start from the top: the kingdom first, then the regions in it, then their cities.'"
           >
             <UButton
-              label="New Location"
-              icon="i-lucide-plus"
-              to="/entities/new?type=location"
+              label="Add a place"
+              icon="i-lucide-map-pin-plus"
+              @click="addPlaceOpen = true"
             />
           </EmptyState>
+
+          <AddPlaceInside
+            v-model:open="addPlaceOpen"
+            :place-id="explorer.here?.id ?? null"
+            :place-name="explorer.here?.name ?? null"
+            :place-kind="String(explorer.here?.data.kind ?? '')"
+            @created="load"
+          />
         </div>
 
         <!-- Grouped by place: the same cards, under the world they belong to -->

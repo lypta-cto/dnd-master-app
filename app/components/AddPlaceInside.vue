@@ -9,8 +9,9 @@
  * dialog each.
  */
 const props = defineProps<{
-  placeId: string
-  placeName: string
+  /** Absent means the top of the world — created, but placed in nothing */
+  placeId?: string | null
+  placeName?: string | null
   /** The rung of the place this dialog adds into, for guessing the next one */
   placeKind?: string
 }>()
@@ -39,7 +40,10 @@ const busy = ref(false)
 watch(open, (isOpen) => {
   if (isOpen) {
     name.value = ''
-    kind.value = NEXT_RUNG[props.placeKind ?? ''] ?? undefined
+    // At the top of the world the first thing you make is a kingdom
+    kind.value = props.placeId
+      ? NEXT_RUNG[props.placeKind ?? ''] ?? undefined
+      : 'kingdom'
   }
 })
 
@@ -56,7 +60,9 @@ async function create(openAfter = false) {
       name: trimmed,
       data: kind.value ? { kind: kind.value } : {}
     })
-    await entities.link(created.id, props.placeId, 'located_in')
+    if (props.placeId) {
+      await entities.link(created.id, props.placeId, 'located_in')
+    }
 
     emit('created')
 
@@ -67,7 +73,9 @@ async function create(openAfter = false) {
     }
 
     toast.add({
-      title: `“${trimmed}” now stands in ${props.placeName}`,
+      title: props.placeName
+        ? `“${trimmed}” now stands in ${props.placeName}`
+        : `“${trimmed}” stands at the top of the world`,
       icon: 'i-lucide-map-pin-check',
       color: 'success'
     })
@@ -84,7 +92,7 @@ async function create(openAfter = false) {
 <template>
   <UModal
     v-model:open="open"
-    :title="`A new place in ${placeName}`"
+    :title="placeName ? `A new place in ${placeName}` : 'A new place, top of the world'"
     description="Named and placed in one step. The dialog stays open — add the whole tier in one sitting."
     :ui="{ content: 'max-w-md' }"
   >
