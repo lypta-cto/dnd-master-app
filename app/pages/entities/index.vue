@@ -2,6 +2,7 @@
 const route = useRoute()
 const { current, isDm } = useCampaigns()
 const entities = useEntities()
+const placesNav = usePlacesNav()
 
 const type = computed(() => {
   const raw = route.query.type
@@ -97,6 +98,12 @@ async function load() {
 
     if (request === latest) {
       pageData.value = result
+
+      // The sidebar's world doorways ride along for free: this is the same
+      // full, unfiltered set it would have fetched itself
+      if (type.value === 'location' && !applied.value && page.value === 1) {
+        placesNav.remember(result.items)
+      }
     }
   } finally {
     if (request === latest) {
