@@ -54,6 +54,18 @@ const contents = computed(() => {
 
 const busy = ref(false)
 
+/**
+ * The top of the world needs no placing.
+ *
+ * A kingdom or a plane IS the outermost thing — offering to put it inside
+ * something reads as a mistake to fix, and the DM said as much. Anything
+ * smaller that's unplaced still gets the quiet offer.
+ */
+const topOfTheWorld = computed(() =>
+  !props.entity.ancestors.length
+  && ['plane', 'kingdom'].includes(String(props.entity.data.kind ?? ''))
+)
+
 /* --- Picking a parent ------------------------------------------------------ */
 
 const picker = reactive({
@@ -129,9 +141,10 @@ async function detach() {
 </script>
 
 <template>
-  <!-- Slim: the chain as one line, for pages that have bigger things to show -->
+  <!-- Slim: the chain as one line, for pages that have bigger things to show.
+     The top of the world renders nothing at all — there is nowhere to put it. -->
   <div
-    v-if="slim"
+    v-if="slim && !topOfTheWorld"
     class="app-card flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5"
   >
     <template v-if="entity.ancestors.length">
@@ -172,10 +185,10 @@ async function detach() {
       class="flex items-center gap-1.5 text-sm text-dimmed"
     >
       <UIcon
-        name="i-lucide-globe"
+        name="i-lucide-map-pin-off"
         class="size-3.5"
       />
-      Top of the world
+      Not placed yet
     </span>
 
     <span class="flex-1" />
@@ -208,7 +221,7 @@ async function detach() {
   </div>
 
   <ContentCard
-    v-else
+    v-else-if="!slim"
     title="In the world"
     icon="i-lucide-map-pinned"
     :description="entity.ancestors.length || contents.places.length || contents.happenings.length

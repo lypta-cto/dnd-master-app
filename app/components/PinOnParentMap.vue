@@ -74,6 +74,30 @@ function place(event: MouseEvent) {
 
 const saving = ref(false)
 
+/** The pin comes off the parent's map — read fresh, drop ours, write back */
+async function removePin() {
+  saving.value = true
+  try {
+    const fresh = await entities.read(props.parentId)
+    const pins = (Array.isArray(fresh.data.pins) ? (fresh.data.pins as MapPin[]) : [])
+      .filter(pin => pin.entity_id !== props.entity.id)
+
+    parent.value = await entities.update(props.parentId, { data: { ...fresh.data, pins } })
+    spot.value = null
+
+    toast.add({
+      title: `Pin removed from ${props.parentName}'s map`,
+      icon: 'i-lucide-map-pin-off',
+      color: 'success'
+    })
+    open.value = false
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    saving.value = false
+  }
+}
+
 async function save() {
   if (!spot.value) {
     return
@@ -165,6 +189,16 @@ async function save() {
           </div>
 
           <div class="flex items-center justify-end gap-2">
+            <UButton
+              v-if="currentPin"
+              label="Remove pin"
+              icon="i-lucide-map-pin-off"
+              color="error"
+              variant="ghost"
+              size="sm"
+              :loading="saving"
+              @click="removePin"
+            />
             <UButton
               :label="currentPin ? 'Move the pin here' : 'Pin it here'"
               icon="i-lucide-map-pin-check"

@@ -384,50 +384,47 @@ const castingMap = ref(false)
 const pinVisibility = new Map<string, string | null>()
 
 /** The name to show the table, or null when the party shouldn't see it at all */
-async function pinNameForTable(entityId: string): Promise<string | null> {
+async function pinEntityName(entityId: string): Promise<string | null> {
   const remembered = pinVisibility.get(entityId)
   if (remembered !== undefined) {
     return remembered
   }
 
   try {
-    const linked = await entities.read(entityId)
-    pinVisibility.set(entityId, linked.visibility === 'dm_only' ? null : linked.name)
+    pinVisibility.set(entityId, (await entities.read(entityId)).name)
   } catch {
-    pinVisibility.set(entityId, null) // deleted or hidden — not for the table
+    pinVisibility.set(entityId, null) // deleted — nothing to name
   }
 
   return pinVisibility.get(entityId)!
 }
 
 /** What the table should be looking at, as the party knows it */
-async function buildCastState(): Promise<{ state: CastState, shown: number }> {
-  // The table sees a pin only if its entity is something players may know
-  // about. Label-only pins are deliberate DM annotations — they go through.
+async function buildCastState(): Promise<{ state: CastState, shown: number, fogged: number }> {
+  // Dropping a pin IS the DM deciding the table may see that name — the
+  // entity's visibility gates its page, not a label the DM placed by hand.
+  // (It used to gate the cast too, and the DM pinned a city, cast the map,
+  // and watched nothing appear.) Fog is the one thing that still hides a
+  // pin: "Dragon lair" floating over an unexplored corner gives the game
+  // away more cheaply than the map ever would.
   const visiblePins: { x: number, y: number, label: string }[] = []
+  let fogged = 0
 
   for (const pin of pins.value) {
-    // A pin standing in fog names the thing the fog is hiding. "Dragon lair"
-    // floating over an unexplored corner gives the game away more cheaply
-    // than the map ever would.
     if (!isRevealed(pin.x, pin.y)) {
+      fogged += 1
       continue
     }
 
-    if (pin.entity_id) {
-      // The pin's own label wins; the entity's name is the fallback for a pin
-      // dropped straight onto something without renaming it
-      const name = await pinNameForTable(pin.entity_id)
-      if (name) {
-        visiblePins.push({ x: pin.x, y: pin.y, label: pin.label || name })
-      }
-    } else if (pin.label) {
-      visiblePins.push({ x: pin.x, y: pin.y, label: pin.label })
+    const label = pin.label || (pin.entity_id ? await pinEntityName(pin.entity_id) : null)
+    if (label) {
+      visiblePins.push({ x: pin.x, y: pin.y, label })
     }
   }
 
   return {
     shown: visiblePins.length,
+    fogged,
     state: {
       mode: 'map',
       payload: {
@@ -455,14 +452,19 @@ async function castMap() {
   pinVisibility.clear()
 
   try {
-    const { state, shown } = await buildCastState()
+    const { state, shown, fogged } = await buildCastState()
     const result = await cast.set(state)
 
     toast.add({
       title: `Map on the table (${shown}/${pins.value.length} pins shown)`,
       icon: 'i-lucide-map',
       color: result.displays_connected ? 'success' : 'warning',
-      description: result.displays_connected ? undefined : 'No display connected'
+      // Silence here once read as a bug — say who the fog is holding back
+      description: !result.displays_connected
+        ? 'No display connected'
+        : fogged
+          ? `${fogged} pin${fogged === 1 ? '' : 's'} under fog — reveal the area to show ${fogged === 1 ? 'it' : 'them'}.`
+          : undefined
     })
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })

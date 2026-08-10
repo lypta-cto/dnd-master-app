@@ -95,6 +95,9 @@ const placeContents = computed(() => {
 /** The "Add a map" dialog for this place */
 const addMapOpen = ref(false)
 
+/** The "new place inside this one" dialog — building downward in one step */
+const addPlaceOpen = ref(false)
+
 /**
  * Links and mentions fold away on location pages — the map and the world
  * below are what the page is for; the wiring is there when asked.
@@ -541,6 +544,13 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           <template #actions>
             <UButton
               v-if="canWrite"
+              label="Add a place"
+              icon="i-lucide-map-pin-plus"
+              size="sm"
+              @click="addPlaceOpen = true"
+            />
+            <UButton
+              v-if="canWrite"
               :label="mapImageOf(entity) ? 'Change the map' : 'Add a map'"
               icon="i-lucide-map"
               color="neutral"
@@ -719,6 +729,15 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           @changed="load"
         />
 
+        <AddPlaceInside
+          v-if="entity.type === 'location'"
+          v-model:open="addPlaceOpen"
+          :place-id="entity.id"
+          :place-name="entity.name"
+          :place-kind="String(entity.data.kind ?? '')"
+          @created="load"
+        />
+
         <ImageLightbox
           v-if="entity.image_url"
           v-model:open="headerLightbox"
@@ -850,7 +869,7 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           </ul>
         </ContentCard>
 
-        <ContentCard v-if="isDm">
+        <ContentCard v-if="isDm && entity.type !== 'location'">
           <UButton
             label="Delete"
             icon="i-lucide-trash-2"
@@ -860,6 +879,22 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
             @click="destroy"
           />
         </ContentCard>
+
+        <!-- Destruction shouldn't get its own billboard: one small line,
+           bottom right, easy to find on purpose and hard to hit by accident -->
+        <div
+          v-if="isDm && entity.type === 'location'"
+          class="flex justify-end"
+        >
+          <UButton
+            label="Delete this place"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            size="xs"
+            @click="destroy"
+          />
+        </div>
       </div>
     </div>
   </AppPage>
