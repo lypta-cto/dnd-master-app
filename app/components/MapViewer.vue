@@ -45,7 +45,40 @@ const cells = ref<Uint8Array>(fog.value ? decodeCells(fog.value) : new Uint8Arra
 const fogVersion = ref(0)
 
 /** Painting and pin placement fight over the same clicks, so only one is live */
-const tool = ref<'pins' | 'fog'>('pins')
+const tool = ref<'pins' | 'fog' | 'crop'>('pins')
+
+/* --- Cast crop --------------------------------------------------------------
+ * The slice of the map the table sees. A tall image with the world in its
+ * bottom third casts as a dark wall with a sliver of map; the DM drags out
+ * the part worth showing and the display fills the screen with that. Stored
+ * on the entity like the grid, pushed live like everything else.
+ */
+const crop = ref<CastCrop | null>(readCastCrop(props.entity.data))
+const cropDraft = ref<CastCrop | null>(null)
+const cropStart = ref<{ x: number, y: number } | null>(null)
+
+const shownCrop = computed(() => cropDraft.value ?? crop.value)
+
+async function persistCrop(next: CastCrop | null) {
+  try {
+    const fresh = await entities.read(props.entity.id)
+    const data: Record<string, unknown> = { ...fresh.data }
+    if (next) {
+      data.cast_crop = { ...next }
+    } else {
+      delete data.cast_crop
+    }
+    await entities.update(props.entity.id, { data })
+    crop.value = next
+    await pushIfLive()
+  } catch (error) {
+    toast.add({
+      title: apiErrorMessage(error, 'Crop not saved'),
+      icon: 'i-lucide-circle-alert',
+      color: 'error'
+    })
+  }
+}
 const brushMode = ref<'reveal' | 'hide'>('reveal')
 const brush = ref(6)
 
@@ -195,6 +228,15 @@ const painting = ref(false)
 const draggingId = ref<string | null>(null)
 
 function onPointerDown(event: PointerEvent) {
+  if (props.canEdit && tool.value === 'crop') {
+    event.preventDefault()
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    const point = pointAt(event)
+    cropStart.value = point
+    cropDraft.value = { x: point.x, y: point.y, w: 0, h: 0 }
+    return
+  }
+
   if (!props.canEdit || tool.value !== 'fog' || !fogOn.value) {
     return
   }
@@ -207,6 +249,17 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
+  if (cropStart.value) {
+    const point = pointAt(event)
+    cropDraft.value = {
+      x: Math.min(cropStart.value.x, point.x),
+      y: Math.min(cropStart.value.y, point.y),
+      w: Math.abs(point.x - cropStart.value.x),
+      h: Math.abs(point.y - cropStart.value.y)
+    }
+    return
+  }
+
   if (draggingId.value) {
     const pin = pins.value.find(p => p.id === draggingId.value)
     if (pin) {
@@ -223,6 +276,17 @@ function onPointerMove(event: PointerEvent) {
 }
 
 function onPointerUp() {
+  if (cropStart.value) {
+    const drawn = cropDraft.value
+    cropStart.value = null
+    cropDraft.value = null
+    // A drag, not a click — a 2% sliver is a slip of the hand
+    if (drawn && drawn.w > 3 && drawn.h > 3) {
+      persistCrop(drawn)
+    }
+    return
+  }
+
   if (draggingId.value) {
     draggingId.value = null
     persist()
@@ -372,6 +436,8 @@ async function buildCastState(): Promise<{ state: CastState, shown: number }> {
         image_url: mapSrc.value,
         caption: props.entity.name,
         pins: visiblePins,
+        // Only the slice worth showing, when one is drawn
+        crop: crop.value ? { ...crop.value } : null,
         // The table sees the map as the party knows it, not as the DM does
         fog: fog.value ? { ...fog.value, mask: encodeCells(cells.value) } : null
       }
@@ -466,6 +532,15 @@ async function pushIfLive() {
           @click="tool = tool === 'fog' ? 'pins' : 'fog'; placing = false"
         />
         <UButton
+          :label="crop ? 'Cast crop' : 'Crop cast'"
+          icon="i-lucide-crop"
+          :color="tool === 'crop' ? 'primary' : 'neutral'"
+          :variant="tool === 'crop' ? 'solid' : 'outline'"
+          size="sm"
+          :disabled="!mapSrc"
+          @click="tool = tool === 'crop' ? 'pins' : 'crop'; placing = false"
+        />
+        <UButton
           label="Cast map"
           icon="i-lucide-cast"
           size="sm"
@@ -484,6 +559,27 @@ async function pushIfLive() {
     </p>
 
     <template v-else>
+      <!-- Crop controls, only while cropping -->
+      <div
+        v-if="canEdit && tool === 'crop'"
+        class="flex flex-wrap items-center gap-3 border-b border-default px-4 py-2.5"
+      >
+        <p class="text-xs text-dimmed">
+          Drag the part of the map the table should see. Casting sends only
+          that slice, full screen.
+        </p>
+        <UButton
+          v-if="crop"
+          label="Full map"
+          icon="i-lucide-maximize"
+          color="error"
+          variant="ghost"
+          size="xs"
+          class="ml-auto"
+          @click="persistCrop(null)"
+        />
+      </div>
+
       <!-- Brush controls, only while painting -->
       <div
         v-if="canEdit && tool === 'fog'"
@@ -541,7 +637,7 @@ async function pushIfLive() {
       <div
         ref="surface"
         class="relative touch-none select-none"
-        :class="placing ? 'cursor-crosshair' : tool === 'fog' && canEdit ? 'cursor-cell' : undefined"
+        :class="placing || (tool === 'crop' && canEdit) ? 'cursor-crosshair' : tool === 'fog' && canEdit ? 'cursor-cell' : undefined"
         @click="onMapClick"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
@@ -563,6 +659,19 @@ async function pushIfLive() {
           :h="fog.h"
           :version="fogVersion"
           :opaque="!canEdit"
+        />
+
+        <!-- What the table will see, while the crop tool is out -->
+        <div
+          v-if="tool === 'crop' && shownCrop"
+          class="pointer-events-none absolute border-2 border-dashed border-primary"
+          :style="{
+            left: `${shownCrop.x}%`,
+            top: `${shownCrop.y}%`,
+            width: `${shownCrop.w}%`,
+            height: `${shownCrop.h}%`,
+            boxShadow: '0 0 0 9999px rgb(0 0 0 / 45%)'
+          }"
         />
 
         <UPopover

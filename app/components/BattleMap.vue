@@ -356,6 +356,8 @@ async function castBattle() {
         image_url: mapSrc.value,
         caption: map.value.name,
         pins: [],
+        // The DM's chosen slice travels with the fight too
+        crop: readCastCrop(map.value.data),
         fog: fog.value,
         grid: grid.value,
         // Only what's on the board, and only what the party may know: a

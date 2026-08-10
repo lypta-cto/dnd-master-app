@@ -60,6 +60,30 @@ export interface SearchHit extends EntitySummary {
   rank: number
 }
 
+/**
+ * The slice of the map the table actually sees, in percentages of the image.
+ *
+ * A tall image with the world in its bottom third casts as a huge dark
+ * rectangle with a sliver of map — so the DM drags out the part worth
+ * showing, and the display fills the screen with that instead.
+ */
+export interface CastCrop {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export function readCastCrop(data: Record<string, unknown>): CastCrop | null {
+  const raw = data.cast_crop as CastCrop | undefined
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const { x, y, w, h } = raw
+  const numbers = [x, y, w, h].every(value => typeof value === 'number' && Number.isFinite(value))
+  return numbers && w > 1 && h > 1 ? { x, y, w, h } : null
+}
+
 export interface MapPin {
   id: string
   /** Percentages of the image, so pins survive any screen size */

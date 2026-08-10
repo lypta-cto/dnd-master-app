@@ -26,6 +26,43 @@ const { state, connected, failed } = useCastDisplay(campaignId, token)
 const castGrid = computed(() => readGrid(state.value.payload as Record<string, unknown>))
 const castAspect = ref(1)
 
+/**
+ * The DM's chosen slice of the map, when one was drawn.
+ *
+ * The whole image still travels (fog needs it, and the crop can change
+ * mid-fight), but the screen frames only this rectangle: the inner box takes
+ * the slice's aspect, and a full-size "plane" holding the image and every
+ * overlay is shifted so the slice fills it. Overlays keep their original
+ * percentages — the plane is the coordinate system they always had.
+ */
+const castCrop = computed(() => {
+  const raw = state.value.payload.crop as { x: number, y: number, w: number, h: number } | null | undefined
+  if (!raw || typeof raw.w !== 'number' || raw.w <= 1 || raw.h <= 1) {
+    return null
+  }
+  return raw
+})
+
+const shownAspect = computed(() =>
+  castCrop.value
+    ? castAspect.value * (castCrop.value.w / castCrop.value.h)
+    : castAspect.value
+)
+
+const planeStyle = computed(() => {
+  if (!castCrop.value) {
+    return { position: 'absolute' as const, inset: '0' }
+  }
+  const { x, y, w, h } = castCrop.value
+  return {
+    position: 'absolute' as const,
+    width: `${10000 / w}%`,
+    height: `${10000 / h}%`,
+    left: `${-x * 100 / w}%`,
+    top: `${-y * 100 / h}%`
+  }
+})
+
 function onMapLoad(event: Event) {
   const img = event.target as HTMLImageElement
   if (img.naturalWidth && img.naturalHeight) {
@@ -270,65 +307,67 @@ useHead({ title: 'Display' })
              that hugs the image exactly — not the letterboxed screen -->
         <div
           class="display-map-inner"
-          :style="{ aspectRatio: String(castAspect) }"
+          :style="{ aspectRatio: String(shownAspect) }"
         >
-          <img
-            :src="mediaUrl(String(state.payload.image_url))"
-            alt=""
-            class="display-map-img"
-            @load="onMapLoad"
-          >
-
-          <MapGrid
-            v-if="castGrid"
-            :grid="castGrid"
-            :aspect="castAspect"
-            bold
-          />
-
-          <!-- Opaque here: this is the screen the party is looking at -->
-          <MapFog
-            v-if="castFog"
-            :cells="castFog.cells"
-            :w="castFog.w"
-            :h="castFog.h"
-            opaque
-          />
-
-          <!-- Tokens carry a name and a side and nothing else: a monster's
-               remaining HP is the DM's business, not the table's -->
-          <span
-            v-for="(piece, index) in (state.payload.tokens as any[] ?? [])"
-            :key="`token-${index}`"
-            class="display-token"
-            :class="[
-              piece.kind === 'character' ? 'display-token-party' : 'display-token-foe',
-              piece.down && 'display-token-down'
-            ]"
-            :style="{
-              left: `${piece.x}%`,
-              top: `${piece.y}%`,
-              transform: `translate(-50%, -50%) translate(${piece.dx ?? 0}px, ${piece.dy ?? 0}px)`
-            }"
-          >
+          <div :style="planeStyle">
             <img
-              v-if="piece.image_url"
-              :src="mediaUrl(piece.image_url)"
+              :src="mediaUrl(String(state.payload.image_url))"
               alt=""
-              class="display-token-face"
+              class="display-map-img"
+              @load="onMapLoad"
             >
-            <span class="display-token-label">{{ piece.label }}</span>
-          </span>
 
-          <span
-            v-for="(pin, index) in (state.payload.pins as any[] ?? [])"
-            :key="index"
-            class="display-map-pin"
-            :style="{ left: `${pin.x}%`, top: `${pin.y}%` }"
-          >
-            <span class="display-map-pin-dot" />
-            <span class="display-map-pin-label">{{ pin.label }}</span>
-          </span>
+            <MapGrid
+              v-if="castGrid"
+              :grid="castGrid"
+              :aspect="castAspect"
+              bold
+            />
+
+            <!-- Opaque here: this is the screen the party is looking at -->
+            <MapFog
+              v-if="castFog"
+              :cells="castFog.cells"
+              :w="castFog.w"
+              :h="castFog.h"
+              opaque
+            />
+
+            <!-- Tokens carry a name and a side and nothing else: a monster's
+               remaining HP is the DM's business, not the table's -->
+            <span
+              v-for="(piece, index) in (state.payload.tokens as any[] ?? [])"
+              :key="`token-${index}`"
+              class="display-token"
+              :class="[
+                piece.kind === 'character' ? 'display-token-party' : 'display-token-foe',
+                piece.down && 'display-token-down'
+              ]"
+              :style="{
+                left: `${piece.x}%`,
+                top: `${piece.y}%`,
+                transform: `translate(-50%, -50%) translate(${piece.dx ?? 0}px, ${piece.dy ?? 0}px)`
+              }"
+            >
+              <img
+                v-if="piece.image_url"
+                :src="mediaUrl(piece.image_url)"
+                alt=""
+                class="display-token-face"
+              >
+              <span class="display-token-label">{{ piece.label }}</span>
+            </span>
+
+            <span
+              v-for="(pin, index) in (state.payload.pins as any[] ?? [])"
+              :key="index"
+              class="display-map-pin"
+              :style="{ left: `${pin.x}%`, top: `${pin.y}%` }"
+            >
+              <span class="display-map-pin-dot" />
+              <span class="display-map-pin-label">{{ pin.label }}</span>
+            </span>
+          </div>
         </div>
       </div>
       <p
@@ -536,6 +575,8 @@ useHead({ title: 'Display' })
   height: 100%;
   max-width: 100%;
   max-height: 100%;
+  /* The crop plane hangs past the edges on purpose; the box is the window */
+  overflow: hidden;
 }
 
 .display-map-img {
