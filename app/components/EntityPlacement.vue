@@ -13,6 +13,15 @@
 const props = defineProps<{
   entity: EntityDetail
   canEdit: boolean
+  /**
+   * One quiet row instead of a card.
+   *
+   * A location page opens with its place in the world as a breadcrumb line,
+   * not a box demanding attention — and a kingdom, which sits at the top of
+   * the world, shouldn't open with "Not placed anywhere yet" as if that were
+   * a problem to fix.
+   */
+  slim?: boolean
 }>()
 
 const emit = defineEmits<{ changed: [] }>()
@@ -120,7 +129,86 @@ async function detach() {
 </script>
 
 <template>
+  <!-- Slim: the chain as one line, for pages that have bigger things to show -->
+  <div
+    v-if="slim"
+    class="app-card flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5"
+  >
+    <template v-if="entity.ancestors.length">
+      <template
+        v-for="(step, index) in entity.ancestors"
+        :key="step.id"
+      >
+        <UIcon
+          v-if="index"
+          name="i-lucide-chevron-right"
+          class="size-3.5 shrink-0 text-dimmed"
+        />
+        <NuxtLink
+          :to="`/entities/${step.id}`"
+          class="flex items-center gap-1.5 text-sm text-muted hover:text-primary"
+        >
+          <UIcon
+            :name="entityTypeMeta(step.type).icon"
+            class="size-3.5"
+          />
+          {{ step.name }}
+        </NuxtLink>
+      </template>
+      <UIcon
+        name="i-lucide-chevron-right"
+        class="size-3.5 shrink-0 text-dimmed"
+      />
+      <span class="flex items-center gap-1.5 text-sm font-medium text-highlighted">
+        <UIcon
+          :name="meta.icon"
+          class="size-3.5"
+        />
+        {{ entity.name }}
+      </span>
+    </template>
+    <span
+      v-else
+      class="flex items-center gap-1.5 text-sm text-dimmed"
+    >
+      <UIcon
+        name="i-lucide-globe"
+        class="size-3.5"
+      />
+      Top of the world
+    </span>
+
+    <span class="flex-1" />
+
+    <PinOnParentMap
+      v-if="canEdit && parent"
+      :entity="entity"
+      :parent-id="parent.id"
+      :parent-name="parent.name"
+    />
+    <UButton
+      v-if="canEdit"
+      :label="parent ? 'Move' : 'Place in the world'"
+      icon="i-lucide-map-pinned"
+      color="neutral"
+      variant="ghost"
+      size="xs"
+      @click="picker.open = true"
+    />
+    <UButton
+      v-if="canEdit && parent"
+      icon="i-lucide-x"
+      color="neutral"
+      variant="ghost"
+      size="xs"
+      :loading="busy"
+      aria-label="Take it out of there"
+      @click="detach"
+    />
+  </div>
+
   <ContentCard
+    v-else
     title="In the world"
     icon="i-lucide-map-pinned"
     :description="entity.ancestors.length || contents.places.length || contents.happenings.length
@@ -251,55 +339,56 @@ async function detach() {
         </div>
       </div>
     </div>
-
-    <UModal
-      v-model:open="picker.open"
-      title="Where is it?"
-      description="Search the places you've already made."
-      :ui="{ content: 'max-w-md' }"
-    >
-      <template #body>
-        <div class="space-y-3">
-          <UInput
-            v-model="picker.query"
-            icon="i-lucide-search"
-            placeholder="Barovia, Vallaki…"
-            autofocus
-            class="w-full"
-          />
-
-          <div
-            v-if="picker.results.length"
-            class="space-y-1"
-          >
-            <button
-              v-for="hit in picker.results"
-              :key="hit.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
-              :disabled="busy"
-              @click="place(hit)"
-            >
-              <UIcon
-                :name="entityTypeMeta(hit.type).icon"
-                class="size-4 shrink-0"
-              />
-              <span class="truncate">{{ hit.name }}</span>
-              <span
-                v-if="hit.data.kind"
-                class="ml-auto shrink-0 text-xs capitalize text-dimmed"
-              >{{ hit.data.kind }}</span>
-            </button>
-          </div>
-
-          <p
-            v-else-if="picker.query.trim()"
-            class="text-sm text-muted"
-          >
-            No places match. Make the region or town first, then come back.
-          </p>
-        </div>
-      </template>
-    </UModal>
   </ContentCard>
+
+  <!-- Shared by both faces: slim row and card open the same picker -->
+  <UModal
+    v-model:open="picker.open"
+    title="Where is it?"
+    description="Search the places you've already made."
+    :ui="{ content: 'max-w-md' }"
+  >
+    <template #body>
+      <div class="space-y-3">
+        <UInput
+          v-model="picker.query"
+          icon="i-lucide-search"
+          placeholder="Barovia, Vallaki…"
+          autofocus
+          class="w-full"
+        />
+
+        <div
+          v-if="picker.results.length"
+          class="space-y-1"
+        >
+          <button
+            v-for="hit in picker.results"
+            :key="hit.id"
+            type="button"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-elevated"
+            :disabled="busy"
+            @click="place(hit)"
+          >
+            <UIcon
+              :name="entityTypeMeta(hit.type).icon"
+              class="size-4 shrink-0"
+            />
+            <span class="truncate">{{ hit.name }}</span>
+            <span
+              v-if="hit.data.kind"
+              class="ml-auto shrink-0 text-xs capitalize text-dimmed"
+            >{{ hit.data.kind }}</span>
+          </button>
+        </div>
+
+        <p
+          v-else-if="picker.query.trim()"
+          class="text-sm text-muted"
+        >
+          No places match. Make the region or town first, then come back.
+        </p>
+      </div>
+    </template>
+  </UModal>
 </template>

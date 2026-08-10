@@ -95,6 +95,18 @@ const placeContents = computed(() => {
 /** The "Add a map" dialog for this place */
 const addMapOpen = ref(false)
 
+/**
+ * Links and mentions fold away on location pages — the map and the world
+ * below are what the page is for; the wiring is there when asked.
+ */
+const connectionsOpen = ref(false)
+const mentionCount = computed(() =>
+  backlinkGroups.value.reduce((sum, group) => sum + group.links.length, 0)
+)
+const hasConnections = computed(() =>
+  !!entity.value && (entity.value.links.length > 0 || mentionCount.value > 0)
+)
+
 /** Backlinks grouped by type — a wall of names hides who is talking about whom */
 const backlinkGroups = computed(() => {
   const groups = new Map<EntityType, LinkedEntity[]>()
@@ -403,12 +415,17 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
       />
     </EmptyState>
 
+    <!-- Locations run one full-width column: the map is the centrepiece and
+       a sidebar would squeeze it. Everything else keeps the two columns. -->
     <div
       v-else
-      class="grid gap-4 lg:grid-cols-3"
+      :class="entity.type === 'location' ? 'space-y-4' : 'grid gap-4 lg:grid-cols-3'"
     >
       <!-- Main column -->
-      <div class="space-y-4 lg:col-span-2">
+      <div
+        class="space-y-4"
+        :class="entity.type !== 'location' && 'lg:col-span-2'"
+      >
         <ContentCard>
           <div class="flex flex-wrap items-start gap-4">
             <button
@@ -508,6 +525,7 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           v-if="['location', 'scene', 'encounter', 'map'].includes(entity.type)"
           :entity="entity"
           :can-edit="isDm"
+          :slim="entity.type === 'location'"
           @changed="load"
         />
 
@@ -709,82 +727,104 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
         />
       </div>
 
-      <!-- Connections column -->
+      <!-- Connections column. On location pages it isn't a column at all:
+         links and mentions fold behind one quiet toggle, shown only when
+         they have something to say. -->
       <div class="space-y-4">
-        <ContentCard
-          title="Links"
-          icon="i-lucide-link"
-          :description="entity.links.length ? undefined : 'Write [[Name]] in the body to link.'"
+        <button
+          v-if="entity.type === 'location' && hasConnections"
+          type="button"
+          class="flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-highlighted"
+          @click="connectionsOpen = !connectionsOpen"
         >
-          <ul
-            v-if="entity.links.length"
-            class="space-y-1"
-          >
-            <li
-              v-for="link in entity.links"
-              :key="`${link.id}-${link.relation}`"
-            >
-              <NuxtLink
-                :to="`/entities/${link.id}`"
-                class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
-              >
-                <UIcon
-                  :name="entityTypeMeta(link.type).icon"
-                  class="size-4 shrink-0 text-muted"
-                />
-                <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
-                <span class="ml-auto shrink-0 text-xs text-dimmed">
-                  {{ RELATION_LABELS[link.relation] }}
-                </span>
-              </NuxtLink>
-            </li>
-          </ul>
-        </ContentCard>
+          <UIcon
+            :name="connectionsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            class="size-4"
+          />
+          Links & mentions
+          <span class="tabular-nums text-dimmed">{{ entity.links.length + mentionCount }}</span>
+        </button>
 
-        <ContentCard
-          title="Mentioned in"
-          icon="i-lucide-corner-down-left"
-          :description="entity.backlinks.length
-            ? `${entity.backlinks.length} ${entity.backlinks.length === 1 ? 'entry mentions' : 'entries mention'} this.`
-            : 'Nothing links here yet.'"
+        <div
+          v-if="entity.type !== 'location' || (hasConnections && connectionsOpen)"
+          class="space-y-4"
+          :class="entity.type === 'location' && 'lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0'"
         >
-          <div
-            v-if="backlinkGroups.length"
-            class="space-y-3"
+          <ContentCard
+            title="Links"
+            icon="i-lucide-link"
+            :description="entity.links.length ? undefined : 'Write [[Name]] in the body to link.'"
+          >
+            <ul
+              v-if="entity.links.length"
+              class="space-y-1"
+            >
+              <li
+                v-for="link in entity.links"
+                :key="`${link.id}-${link.relation}`"
+              >
+                <NuxtLink
+                  :to="`/entities/${link.id}`"
+                  class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
+                >
+                  <UIcon
+                    :name="entityTypeMeta(link.type).icon"
+                    class="size-4 shrink-0 text-muted"
+                  />
+                  <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
+                  <span class="ml-auto shrink-0 text-xs text-dimmed">
+                    {{ RELATION_LABELS[link.relation] }}
+                  </span>
+                </NuxtLink>
+              </li>
+            </ul>
+          </ContentCard>
+
+          <ContentCard
+            title="Mentioned in"
+            icon="i-lucide-corner-down-left"
+            :description="entity.backlinks.length
+              ? `${entity.backlinks.length} ${entity.backlinks.length === 1 ? 'entry mentions' : 'entries mention'} this.`
+              : 'Nothing links here yet.'"
           >
             <div
-              v-for="group in backlinkGroups"
-              :key="group.type"
+              v-if="backlinkGroups.length"
+              class="space-y-3"
             >
-              <p class="mb-1 flex items-center gap-1.5 px-2 text-xs font-medium uppercase tracking-wide text-dimmed">
-                <UIcon
-                  :name="group.meta.icon"
-                  class="size-3.5"
-                />
-                {{ group.links.length > 1 ? group.meta.plural : group.meta.label }}
-                <span class="tabular-nums">{{ group.links.length }}</span>
-              </p>
-              <ul class="space-y-0.5">
-                <li
-                  v-for="link in group.links"
-                  :key="`${link.id}-${link.relation}`"
-                >
-                  <NuxtLink
-                    :to="`/entities/${link.id}`"
-                    class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
+              <div
+                v-for="group in backlinkGroups"
+                :key="group.type"
+              >
+                <p class="mb-1 flex items-center gap-1.5 px-2 text-xs font-medium uppercase tracking-wide text-dimmed">
+                  <UIcon
+                    :name="group.meta.icon"
+                    class="size-3.5"
+                  />
+                  {{ group.links.length > 1 ? group.meta.plural : group.meta.label }}
+                  <span class="tabular-nums">{{ group.links.length }}</span>
+                </p>
+                <ul class="space-y-0.5">
+                  <li
+                    v-for="link in group.links"
+                    :key="`${link.id}-${link.relation}`"
                   >
-                    <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
-                    <VisibilityBadge
-                      v-if="isDm && link.visibility === 'dm_only'"
-                      :visibility="link.visibility"
-                      class="ml-auto shrink-0"
-                    />
-                  </NuxtLink>
-                </li>
-              </ul>
+                    <NuxtLink
+                      :to="`/entities/${link.id}`"
+                      class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-elevated"
+                    >
+                      <span class="truncate text-sm font-medium text-highlighted">{{ link.name }}</span>
+                      <VisibilityBadge
+                        v-if="isDm && link.visibility === 'dm_only'"
+                        :visibility="link.visibility"
+                        class="ml-auto shrink-0"
+                      />
+                    </NuxtLink>
+                  </li>
+                </ul>
+              </div>
             </div>
-          </div>
-        </ContentCard>
+          </ContentCard>
+        </div>
 
         <ContentCard
           v-if="isDm && entity.unresolved_links.length"
