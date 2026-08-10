@@ -2,7 +2,7 @@
 const route = useRoute()
 const { current, isDm } = useCampaigns()
 const entities = useEntities()
-const placesNav = usePlacesNav()
+const mediaUrl = useMediaUrl()
 
 const type = computed(() => {
   const raw = route.query.type
@@ -98,12 +98,6 @@ async function load() {
 
     if (request === latest) {
       pageData.value = result
-
-      // The sidebar's world doorways ride along for free: this is the same
-      // full, unfiltered set it would have fetched itself
-      if (type.value === 'location' && !applied.value && page.value === 1) {
-        placesNav.remember(result.items)
-      }
     }
   } finally {
     if (request === latest) {
@@ -139,63 +133,115 @@ const title = computed(() => meta.value?.plural ?? 'All entities')
  */
 const GROUPABLE: EntityType[] = ['scene', 'encounter', 'location']
 
-/* --- The world as a ladder ---------------------------------------------------
- * Locations render as the containment tree, biggest first: the kingdom, the
- * regions in it, the city in the region, the tavern in the city. Siblings
- * sort by their kind's rung on LOCATION_KINDS, so a plane never files under
- * its own dungeon alphabetically. Searching flattens back to plain results —
- * a tree of matches with the trunk missing helps nobody.
+/* --- The world explorer ------------------------------------------------------
+ * Locations don't render as a list at all: you walk them. Open Locations and
+ * the biggest tier is the whole screen — the kingdoms. Step into one and its
+ * regions are the screen; step into a region and there are its cities. One
+ * tier at a time, the way the world was built, with the path back at the top.
+ * `?in=` carries where you stand, so the browser's back button walks back up
+ * and a bookmarked region opens where you left it. Searching flattens to
+ * plain results — a search that answers inside one kingdom reads as broken.
  */
-const locationTree = computed(() => {
-  if (
-    type.value !== 'location'
-    || applied.value
-    || sort.value !== 'name'
-    || layout.value !== 'list'
-    || !pageData.value
-  ) {
+const KIND_ICONS: Record<string, string> = {
+  plane: 'i-lucide-sparkles',
+  kingdom: 'i-lucide-crown',
+  region: 'i-lucide-map',
+  wilderness: 'i-lucide-trees',
+  forest: 'i-lucide-trees',
+  mountains: 'i-lucide-mountain',
+  swamp: 'i-lucide-waves',
+  island: 'i-lucide-waves',
+  city: 'i-lucide-building-2',
+  town: 'i-lucide-building',
+  village: 'i-lucide-home',
+  district: 'i-lucide-blocks',
+  castle: 'i-lucide-castle',
+  dungeon: 'i-lucide-skull',
+  temple: 'i-lucide-church',
+  tavern: 'i-lucide-beer',
+  shop: 'i-lucide-store',
+  building: 'i-lucide-warehouse'
+}
+
+const kindIcon = (place: EntitySummary) =>
+  KIND_ICONS[String(place.data.kind ?? '')] ?? 'i-lucide-map-pin'
+
+/** Where the DM is standing, carried in the URL so "back" walks back up */
+const standingIn = computed(() => {
+  const id = route.query.in
+  return typeof id === 'string' && id ? id : null
+})
+
+function stepInto(id: string | null) {
+  router.push({ query: { ...route.query, in: id || undefined } })
+}
+
+const explorer = computed(() => {
+  if (type.value !== 'location' || applied.value || !pageData.value) {
     return null
   }
 
   const items = pageData.value.items
-  const ids = new Set(items.map(item => item.id))
-  const children = new Map<string, EntitySummary[]>()
-  const roots: EntitySummary[] = []
+  const byId = new Map(items.map(item => [item.id, item]))
+  const children = new Map<string | null, EntitySummary[]>()
 
   for (const item of items) {
-    // A parent outside this list (another type, or beyond the page cap)
-    // makes the item a root rather than an orphan that never renders
-    if (item.parent && ids.has(item.parent.id)) {
-      children.set(item.parent.id, [...(children.get(item.parent.id) ?? []), item])
-    } else {
-      roots.push(item)
-    }
+    // A parent outside this set (another type, or deleted) makes it a root
+    const parentId = item.parent && byId.has(item.parent.id) ? item.parent.id : null
+    children.set(parentId, [...(children.get(parentId) ?? []), item])
   }
 
   const rung = (entity: EntitySummary) => {
     const index = LOCATION_KINDS.indexOf(String(entity.data.kind ?? ''))
     return index === -1 ? LOCATION_KINDS.length : index
   }
-  const bySize = (a: EntitySummary, b: EntitySummary) =>
-    rung(a) - rung(b) || a.name.localeCompare(b.name)
 
-  const rows: { entity: EntitySummary, depth: number }[] = []
-  const walk = (list: EntitySummary[], depth: number) => {
-    for (const entity of [...list].sort(bySize)) {
-      rows.push({ entity, depth })
-      walk(children.get(entity.id) ?? [], depth + 1)
-    }
+  // Everything under a place, however deep — "a kingdom of 23" says more
+  // than the number of its immediate regions
+  const descendants = (id: string): number => {
+    const direct = children.get(id) ?? []
+    return direct.length + direct.reduce((sum, child) => sum + descendants(child.id), 0)
   }
-  walk(roots, 0)
 
-  return rows
+  const here = standingIn.value ? byId.get(standingIn.value) ?? null : null
+  const shown = children.get(here?.id ?? null) ?? []
+
+  // One tier, grouped by kind in ladder order: Kingdoms, then Regions…
+  const groups = new Map<string, EntitySummary[]>()
+  for (const place of [...shown].sort(
+    (a, b) => rung(a) - rung(b) || a.name.localeCompare(b.name)
+  )) {
+    const kind = String(place.data.kind ?? 'unsorted')
+    groups.set(kind, [...(groups.get(kind) ?? []), place])
+  }
+
+  // The way back up, clickable rung by rung
+  const path: EntitySummary[] = []
+  let cursor = here
+  while (cursor) {
+    path.unshift(cursor)
+    cursor = cursor.parent && byId.has(cursor.parent.id) ? byId.get(cursor.parent.id)! : null
+  }
+
+  return {
+    here,
+    path,
+    groups: [...groups.entries()].map(([kind, places]) => ({
+      kind,
+      places: places.map(place => ({
+        place,
+        inside: descendants(place.id)
+      }))
+    })),
+    empty: shown.length === 0
+  }
 })
 
 const grouped = computed(() => {
   if (!type.value || !GROUPABLE.includes(type.value) || applied.value || !pageData.value) {
     return null
   }
-  if (locationTree.value) {
+  if (explorer.value) {
     return null
   }
 
@@ -414,7 +460,11 @@ watch([type, () => current.value?.id], () => {
           </template>
         </UInput>
 
-        <UDropdownMenu :items="sortMenu">
+        <!-- Walking the world has one order — the ladder. Sorting is for lists. -->
+        <UDropdownMenu
+          v-if="!explorer"
+          :items="sortMenu"
+        >
           <UButton
             :label="sortMeta.label"
             :icon="sortMeta.icon"
@@ -436,6 +486,7 @@ watch([type, () => current.value?.id], () => {
             {{ pageData.total }} {{ pageData.total === 1 ? 'match' : 'matches' }}
           </p>
           <UButton
+            v-if="!explorer"
             :icon="layout === 'grid' ? 'i-lucide-list' : 'i-lucide-layout-grid'"
             :aria-label="layout === 'grid' ? 'Switch to list' : 'Switch to cards'"
             color="neutral"
@@ -521,36 +572,188 @@ watch([type, () => current.value?.id], () => {
           </ul>
         </ContentCard>
 
-        <!-- The world, biggest to smallest: each place indented under the
-             one that holds it -->
+        <!-- The world, walked one tier at a time -->
         <div
-          v-if="locationTree"
-          class="app-card overflow-hidden p-0"
+          v-if="explorer"
+          class="space-y-4"
         >
-          <div
-            v-for="row in locationTree"
-            :key="row.entity.id"
-            class="flex items-stretch"
-          >
-            <div
-              v-if="row.depth"
-              class="flex shrink-0 items-center justify-end pr-1"
-              :style="{ width: `${row.depth * 1.4}rem` }"
+          <!-- The path back up, rung by rung -->
+          <div class="flex flex-wrap items-center gap-1 text-sm">
+            <button
+              type="button"
+              class="flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium transition-colors"
+              :class="explorer.here ? 'text-muted hover:bg-elevated hover:text-highlighted' : 'text-highlighted'"
+              @click="stepInto(null)"
             >
               <UIcon
-                name="i-lucide-corner-down-right"
-                class="size-3.5 text-dimmed/60"
+                name="i-lucide-globe"
+                class="size-4"
+              />
+              The world
+            </button>
+            <template
+              v-for="(step, index) in explorer.path"
+              :key="step.id"
+            >
+              <UIcon
+                name="i-lucide-chevron-right"
+                class="size-3.5 text-dimmed"
+              />
+              <button
+                type="button"
+                class="flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium transition-colors"
+                :class="index === explorer.path.length - 1
+                  ? 'text-highlighted'
+                  : 'text-muted hover:bg-elevated hover:text-highlighted'"
+                @click="stepInto(step.id)"
+              >
+                <UIcon
+                  :name="kindIcon(step)"
+                  class="size-4"
+                />
+                {{ step.name }}
+              </button>
+            </template>
+          </div>
+
+          <!-- Where you're standing: the place itself, and the door to its page -->
+          <div
+            v-if="explorer.here"
+            class="app-card flex flex-wrap items-center gap-4 p-4"
+          >
+            <img
+              v-if="explorer.here.image_url"
+              :src="mediaUrl(explorer.here.image_url)!"
+              :alt="explorer.here.name"
+              class="size-14 shrink-0 rounded-xl object-cover"
+            >
+            <div
+              v-else
+              class="flex size-14 shrink-0 items-center justify-center rounded-xl bg-elevated"
+            >
+              <UIcon
+                :name="kindIcon(explorer.here)"
+                class="size-7 text-dimmed"
               />
             </div>
-            <EntityRow
-              :entity="row.entity"
-              :no-visibility="!isDm"
-              :selectable="selecting"
-              :selected="selected.includes(row.entity.id)"
-              class="min-w-0 flex-1"
-              @toggle="toggle"
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h2 class="truncate text-lg font-semibold text-highlighted">
+                  {{ explorer.here.name }}
+                </h2>
+                <UBadge
+                  v-if="explorer.here.data.kind"
+                  color="neutral"
+                  variant="subtle"
+                  class="rounded-full capitalize"
+                >
+                  {{ explorer.here.data.kind }}
+                </UBadge>
+              </div>
+              <p
+                v-if="explorer.here.summary"
+                class="truncate text-sm text-muted"
+              >
+                {{ explorer.here.summary }}
+              </p>
+            </div>
+            <UButton
+              label="Open this place"
+              icon="i-lucide-arrow-up-right"
+              color="neutral"
+              variant="outline"
+              class="rounded-xl"
+              :to="`/entities/${explorer.here.id}`"
             />
           </div>
+
+          <!-- This tier's places, biggest kinds first -->
+          <section
+            v-for="group in explorer.groups"
+            :key="group.kind"
+            class="space-y-2"
+          >
+            <p class="text-xs font-medium tracking-wide text-dimmed uppercase">
+              {{ group.kind }}
+              <span class="tabular-nums">{{ group.places.length > 1 ? group.places.length : '' }}</span>
+            </p>
+            <div class="app-card overflow-hidden p-0">
+              <div
+                v-for="{ place, inside } in group.places"
+                :key="place.id"
+                class="flex items-center border-b border-default transition-colors last:border-0 hover:bg-elevated/60"
+              >
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+                  @click="stepInto(place.id)"
+                >
+                  <img
+                    v-if="place.image_url"
+                    :src="mediaUrl(place.image_url)!"
+                    :alt="place.name"
+                    class="size-10 shrink-0 rounded-lg object-cover"
+                  >
+                  <div
+                    v-else
+                    class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated"
+                  >
+                    <UIcon
+                      :name="kindIcon(place)"
+                      class="size-5 text-dimmed"
+                    />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-highlighted">
+                      {{ place.name }}
+                    </p>
+                    <p
+                      v-if="place.summary"
+                      class="truncate text-xs text-muted"
+                    >
+                      {{ place.summary }}
+                    </p>
+                  </div>
+                  <span
+                    v-if="inside"
+                    class="shrink-0 text-xs tabular-nums text-dimmed"
+                  >
+                    {{ inside }} {{ inside === 1 ? 'place' : 'places' }} inside
+                  </span>
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="size-4 shrink-0 text-dimmed"
+                  />
+                </button>
+                <NuxtLink
+                  :to="`/entities/${place.id}`"
+                  class="shrink-0 p-3 text-dimmed transition-colors hover:text-primary"
+                  :aria-label="`Open ${place.name}`"
+                >
+                  <UIcon
+                    name="i-lucide-arrow-up-right"
+                    class="size-4"
+                  />
+                </NuxtLink>
+              </div>
+            </div>
+          </section>
+
+          <!-- An empty tier still says where you are and what to do about it -->
+          <EmptyState
+            v-if="explorer.empty"
+            icon="i-lucide-map-pin-plus"
+            :title="explorer.here ? `Nothing inside ${explorer.here.name} yet` : 'The world is unwritten'"
+            :description="explorer.here
+              ? 'Make a place and use “Place it” to put it here — or open this place and build from its page.'
+              : 'Start from the top: the kingdom first, then the regions in it, then their cities.'"
+          >
+            <UButton
+              label="New Location"
+              icon="i-lucide-plus"
+              to="/entities/new?type=location"
+            />
+          </EmptyState>
         </div>
 
         <!-- Grouped by place: the same cards, under the world they belong to -->
