@@ -523,7 +523,7 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           <template #actions>
             <UButton
               v-if="canWrite"
-              label="Add a map"
+              :label="mapImageOf(entity) ? 'Change the map' : 'Add a map'"
               icon="i-lucide-map"
               color="neutral"
               variant="outline"
@@ -620,8 +620,10 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           :can-edit="isDm"
         />
 
+        <!-- Any place with a map picture gets the full board: pins, fog,
+           casting. Map-type entities are the legacy spelling of the same. -->
         <MapViewer
-          v-if="entity.type === 'map'"
+          v-if="entity.type === 'map' || mapImageOf(entity)"
           :key="`map-${entity.id}`"
           :entity="entity"
           :can-edit="isDm"
@@ -695,9 +697,8 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
         <AddMapToPlace
           v-if="entity.type === 'location'"
           v-model:open="addMapOpen"
-          :place-id="entity.id"
-          :place-name="entity.name"
-          @added="load"
+          :entity="entity"
+          @changed="load"
         />
 
         <ImageLightbox

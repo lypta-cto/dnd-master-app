@@ -15,7 +15,9 @@ if (!isDm.value) {
 
 const meta = computed(() => entityTypeMeta(type.value))
 
-const typeItems = ENTITY_TYPES.map(option => ({
+// 'map' is not offered: a map is an attribute of a location ("Add a map" on
+// the place's page), not a thing you create on its own
+const typeItems = ENTITY_TYPES.filter(option => option.value !== 'map').map(option => ({
   value: option.value,
   label: option.label,
   icon: option.icon

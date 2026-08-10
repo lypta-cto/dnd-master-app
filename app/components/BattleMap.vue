@@ -40,6 +40,9 @@ const mediaUrl = useMediaUrl()
 
 const map = ref<EntityDetail | null>(null)
 
+/** The board picture: the location's map attribute (legacy map entities too) */
+const mapSrc = computed(() => (map.value ? mapImageOf(map.value) : null))
+
 const loading = ref(false)
 
 async function load() {
@@ -128,21 +131,31 @@ const picker = reactive({ open: false, query: '', results: [] as EntitySummary[]
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
+/**
+ * Any place with a map can host the fight — the map is the location's
+ * attribute now. Legacy map entities still turn up so old campaigns keep
+ * their boards.
+ */
+async function searchMaps(q: string) {
+  const [places, legacy] = await Promise.all([
+    entities.list({ type: 'location', q: q.trim() || undefined, page_size: 50 }),
+    entities.list({ type: 'map', q: q.trim() || undefined, page_size: 10 })
+  ])
+  picker.results = [...places.items, ...legacy.items]
+    .filter(item => mapImageOf(item))
+    .slice(0, 12)
+}
+
 watch(() => picker.query, (q) => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(async () => {
-    const page = await entities.list({ type: 'map', q: q.trim() || undefined, page_size: 10 })
-    picker.results = page.items.filter(item => item.image_url)
-  }, 250)
+  searchTimer = setTimeout(() => searchMaps(q), 250)
 })
 
 function openPicker() {
   picker.open = true
   picker.query = ''
   // Show what's available before anything is typed — most campaigns have few
-  entities.list({ type: 'map', page_size: 10 }).then((page) => {
-    picker.results = page.items.filter(item => item.image_url)
-  })
+  searchMaps('')
 }
 
 onBeforeUnmount(() => clearTimeout(searchTimer))
@@ -330,7 +343,7 @@ onBeforeUnmount(() => clearTimeout(gridTimer))
 const casting = ref(false)
 
 async function castBattle() {
-  if (!map.value?.image_url) {
+  if (!map.value || !mapSrc.value) {
     return
   }
   casting.value = true
@@ -340,7 +353,7 @@ async function castBattle() {
       mode: 'map',
       payload: {
         entity_id: map.value.id,
-        image_url: map.value.image_url,
+        image_url: mapSrc.value,
         caption: map.value.name,
         pins: [],
         fog: fog.value,
@@ -507,7 +520,7 @@ defineExpose({ castBattle })
         @pointerdown="onMapClick"
       >
         <img
-          :src="mediaUrl(map.image_url!)"
+          :src="mediaUrl(mapSrc!)"
           :alt="map.name"
           class="w-full"
           draggable="false"
@@ -636,7 +649,7 @@ defineExpose({ castBattle })
               @click="emit('chose', hit.id); picker.open = false"
             >
               <img
-                :src="mediaUrl(hit.image_url!)"
+                :src="mediaUrl(mapImageOf(hit)!)"
                 :alt="hit.name"
                 class="size-10 shrink-0 rounded-lg object-cover"
               >
@@ -648,7 +661,7 @@ defineExpose({ castBattle })
             v-else
             class="text-sm text-muted"
           >
-            No maps with a picture yet. Make one under World → Maps.
+            No place has a map yet. Open a location and “Add a map”.
           </p>
         </div>
       </template>

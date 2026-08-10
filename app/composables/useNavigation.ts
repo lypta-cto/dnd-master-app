@@ -11,7 +11,9 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 /** Prep, in the order a DM actually works: the thread first, the world under it */
 const STORY_TYPES: EntityType[] = ['session', 'scene', 'encounter', 'quest', 'clue']
-const WORLD_TYPES: EntityType[] = ['location', 'npc', 'faction', 'monster', 'item', 'map']
+// No 'map' here: a map is an attribute of a location now, not a category —
+// the dungeon's floor plan lives on the dungeon's page
+const WORLD_TYPES: EntityType[] = ['location', 'npc', 'faction', 'monster', 'item']
 
 export function useNavigation() {
   const route = useRoute()

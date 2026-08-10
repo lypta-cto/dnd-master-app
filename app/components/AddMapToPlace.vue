@@ -2,18 +2,17 @@
 /**
  * Giving a place its map.
  *
- * A map is its own entity — pins, fog, casting — so "adding a map to the
- * kingdom" means placing a map entity inside it: pick one the campaign
- * already has, or name a new one and go straight to its page to hang the
- * picture. Either way the place's "In this place" card offers it back with
- * a thumbnail from then on.
+ * The map is an attribute of the location, not a thing of its own — the
+ * dungeon's floor plan belongs to the dungeon. This sets `map_image_url` in
+ * the place's data: upload a picture, or point at one already in the
+ * gallery. The moment it's set, the place's page grows the full board —
+ * pins, fog, casting — and children can pin themselves onto it.
  */
 const props = defineProps<{
-  placeId: string
-  placeName: string
+  entity: EntityDetail
 }>()
 
-const emit = defineEmits<{ added: [] }>()
+const emit = defineEmits<{ changed: [] }>()
 
 const open = defineModel<boolean>('open', { required: true })
 
@@ -21,52 +20,54 @@ const entities = useEntities()
 const mediaUrl = useMediaUrl()
 const toast = useToast()
 
-const query = ref('')
-const results = ref<EntitySummary[]>([])
-const newName = ref('')
 const busy = ref(false)
 
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-
-async function search() {
-  const page = await entities.list({
-    type: 'map',
-    q: query.value.trim() || undefined,
-    page_size: 8
-  })
-  results.value = page.items
-}
-
-watch(query, () => {
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(search, 300)
+const currentMap = computed(() => {
+  const url = props.entity.data.map_image_url
+  return typeof url === 'string' && url ? url : null
 })
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    query.value = ''
-    newName.value = ''
-    search()
+/** The gallery, fetched when the dialog opens — it lives behind its own GET */
+const gallery = ref<EntityImage[]>([])
+
+watch(open, async (isOpen) => {
+  if (!isOpen) {
+    return
+  }
+  try {
+    gallery.value = await entities.images(props.entity.id)
+  } catch {
+    gallery.value = []
   }
 })
 
-onBeforeUnmount(() => clearTimeout(searchTimer))
-
-/** An existing map moves here — one home at a time, like every placement */
-async function attach(map: EntitySummary) {
+/** Point the attribute somewhere and reload — one write, whole story */
+async function setMap(url: string | null) {
   busy.value = true
   try {
-    if (map.parent) {
-      await entities.unlink(map.id, map.parent.id)
+    // Read first: `data` is replaced whole and this page's copy may be stale
+    const fresh = await entities.read(props.entity.id)
+    const data: Record<string, unknown> = { ...fresh.data }
+
+    if (url) {
+      data.map_image_url = url
+    } else {
+      // The picture goes; pins, fog and grid go with it — they were
+      // percentages of an image that no longer exists
+      delete data.map_image_url
+      delete data.pins
+      delete data.fog
+      delete data.grid
     }
-    await entities.link(map.id, props.placeId, 'located_in')
+
+    await entities.update(props.entity.id, { data })
     toast.add({
-      title: `“${map.name}” is now the map of ${props.placeName}`,
-      icon: 'i-lucide-map',
+      title: url ? `${props.entity.name} has its map` : 'Map removed',
+      icon: url ? 'i-lucide-map' : 'i-lucide-map-off',
       color: 'success'
     })
     open.value = false
-    emit('added')
+    emit('changed')
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
@@ -74,22 +75,18 @@ async function attach(map: EntitySummary) {
   }
 }
 
-/** A brand-new map lands placed and opens ready for its picture */
-async function createNew() {
-  const name = newName.value.trim()
-  if (!name) {
+/** A new picture lands in the gallery first, so it's kept like any other */
+async function onFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) {
     return
   }
   busy.value = true
   try {
-    const created = await entities.create({ type: 'map', name })
-    await entities.link(created.id, props.placeId, 'located_in')
-    open.value = false
-    emit('added')
-    await navigateTo(`/entities/${created.id}`)
+    const image = await entities.addImage(props.entity.id, file, 'Map')
+    await setMap(image.url)
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
-  } finally {
     busy.value = false
   }
 }
@@ -98,74 +95,66 @@ async function createNew() {
 <template>
   <UModal
     v-model:open="open"
-    :title="`A map for ${placeName}`"
-    description="Pick a map the campaign already has, or start a new one and hang its picture next."
+    :title="`The map of ${entity.name}`"
+    description="Upload a picture, or use one already in the gallery. Pins, fog and casting live on it."
     :ui="{ content: 'max-w-md' }"
   >
     <template #body>
       <div class="space-y-3">
-        <UInput
-          v-model="query"
-          icon="i-lucide-search"
-          placeholder="Search maps…"
-          autofocus
-          class="w-full"
-        />
-
-        <div
-          v-if="results.length"
-          class="space-y-1"
-        >
-          <button
-            v-for="map in results"
-            :key="map.id"
-            type="button"
-            class="flex w-full items-center gap-2 rounded-lg p-1.5 text-left text-sm hover:bg-elevated"
+        <label class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-default p-5 text-center transition-colors hover:border-accented">
+          <UIcon
+            name="i-lucide-upload"
+            class="size-6 text-dimmed"
+          />
+          <span class="text-sm font-medium text-highlighted">Upload a map picture</span>
+          <span class="text-xs text-dimmed">It joins the gallery too</span>
+          <input
+            type="file"
+            accept="image/*"
+            class="hidden"
             :disabled="busy"
-            @click="attach(map)"
+            @change="onFile"
           >
-            <img
-              v-if="map.image_url"
-              :src="mediaUrl(map.image_url)!"
-              :alt="map.name"
-              class="size-10 shrink-0 rounded-lg object-cover"
-            >
-            <div
-              v-else
-              class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated"
-            >
-              <UIcon
-                name="i-lucide-map"
-                class="size-5 text-dimmed"
-              />
-            </div>
-            <span class="min-w-0 flex-1 truncate">{{ map.name }}</span>
-            <span
-              v-if="map.parent"
-              class="shrink-0 text-xs text-dimmed"
-            >now in {{ map.parent.name }}</span>
-          </button>
-        </div>
+        </label>
 
-        <USeparator label="or" />
+        <template v-if="gallery.length">
+          <USeparator label="or pick from the gallery" />
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="image in gallery"
+              :key="image.id"
+              type="button"
+              class="group relative overflow-hidden rounded-lg border-2 transition-colors"
+              :class="currentMap === image.url ? 'border-primary' : 'border-transparent hover:border-accented'"
+              :disabled="busy"
+              @click="setMap(image.url)"
+            >
+              <img
+                :src="mediaUrl(image.url)!"
+                :alt="image.caption ?? entity.name"
+                class="aspect-video w-full object-cover"
+              >
+              <span
+                v-if="currentMap === image.url"
+                class="absolute top-1 right-1 rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold text-inverted"
+              >
+                current
+              </span>
+            </button>
+          </div>
+        </template>
 
-        <form
-          class="flex gap-2"
-          @submit.prevent="createNew"
-        >
-          <UInput
-            v-model="newName"
-            :placeholder="`Map of ${placeName}`"
-            class="flex-1"
-          />
-          <UButton
-            type="submit"
-            label="Create"
-            icon="i-lucide-plus"
-            :loading="busy"
-            :disabled="!newName.trim()"
-          />
-        </form>
+        <UButton
+          v-if="currentMap"
+          label="Remove the map"
+          icon="i-lucide-map-off"
+          color="error"
+          variant="ghost"
+          size="sm"
+          block
+          :loading="busy"
+          @click="setMap(null)"
+        />
       </div>
     </template>
   </UModal>

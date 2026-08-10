@@ -21,6 +21,12 @@ const pins = ref<MapPin[]>(
   Array.isArray(props.entity.data.pins) ? [...(props.entity.data.pins as MapPin[])] : []
 )
 
+/**
+ * The map picture: the location's own `map_image_url` attribute, or — for
+ * legacy map entities from when maps were their own type — the cover image.
+ */
+const mapSrc = computed(() => mapImageOf(props.entity))
+
 const placing = ref(false)
 const saving = ref(false)
 
@@ -363,7 +369,7 @@ async function buildCastState(): Promise<{ state: CastState, shown: number }> {
       payload: {
         // So the top bar can name this and link back to it
         entity_id: props.entity.id,
-        image_url: props.entity.image_url,
+        image_url: mapSrc.value,
         caption: props.entity.name,
         pins: visiblePins,
         // The table sees the map as the party knows it, not as the DM does
@@ -374,7 +380,7 @@ async function buildCastState(): Promise<{ state: CastState, shown: number }> {
 }
 
 async function castMap() {
-  if (!props.entity.image_url) {
+  if (!mapSrc.value) {
     return
   }
   castingMap.value = true
@@ -447,7 +453,7 @@ async function pushIfLive() {
           color="neutral"
           variant="outline"
           size="sm"
-          :disabled="!entity.image_url"
+          :disabled="!mapSrc"
           @click="enableFog"
         />
         <UButton
@@ -464,17 +470,17 @@ async function pushIfLive() {
           icon="i-lucide-cast"
           size="sm"
           :loading="castingMap"
-          :disabled="!entity.image_url"
+          :disabled="!mapSrc"
           @click="castMap"
         />
       </template>
     </template>
 
     <p
-      v-if="!entity.image_url"
+      v-if="!mapSrc"
       class="p-6 text-sm text-muted"
     >
-      Upload the map image to the gallery below and set it as cover — pins go on top of it.
+      No map picture yet — add one with “Add a map” above, and pins go on top of it.
     </p>
 
     <template v-else>
@@ -543,7 +549,7 @@ async function pushIfLive() {
         @pointercancel="onPointerUp"
       >
         <img
-          :src="mediaUrl(entity.image_url)"
+          :src="mediaUrl(mapSrc)"
           :alt="entity.name"
           class="w-full"
           draggable="false"

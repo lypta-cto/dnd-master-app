@@ -223,6 +223,27 @@ export const LOCATION_KINDS = [
   'temple', 'tavern', 'shop', 'building'
 ]
 
+/**
+ * The picture a place is walked on, wherever it lives.
+ *
+ * A map is not its own category of thing — the dungeon's floor plan belongs
+ * to the dungeon, which sits in a house in a village in a kingdom. So the map
+ * is an attribute: `data.map_image_url` on the location, with pins, fog and
+ * grid beside it in the same `data`. Legacy map entities (from when maps were
+ * a type) still answer through their cover image, so nothing old goes blank.
+ */
+export function mapImageOf(entity: {
+  type: EntityType
+  image_url?: string | null
+  data: Record<string, unknown>
+}): string | null {
+  const own = entity.data.map_image_url
+  if (typeof own === 'string' && own) {
+    return own
+  }
+  return entity.type === 'map' ? (entity.image_url ?? null) : null
+}
+
 /** Common CRs offered as you type; anything else is still accepted */
 const CHALLENGE_RATINGS = [
   '0', '1/8', '1/4', '1/2',
