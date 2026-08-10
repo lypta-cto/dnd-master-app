@@ -199,6 +199,15 @@ async function detach() {
         Not placed anywhere yet.
       </p>
 
+      <!-- Standing somewhere with a map means this can stand ON the map.
+         The component hides itself when the parent has no mapped map. -->
+      <PinOnParentMap
+        v-if="canEdit && parent"
+        :entity="entity"
+        :parent-id="parent.id"
+        :parent-name="parent.name"
+      />
+
       <!-- What's inside -->
       <div
         v-if="contents.places.length"

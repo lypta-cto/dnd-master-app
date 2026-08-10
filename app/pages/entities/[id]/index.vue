@@ -92,6 +92,9 @@ const placeContents = computed(() => {
   }
 })
 
+/** The "Add a map" dialog for this place */
+const addMapOpen = ref(false)
+
 /** Backlinks grouped by type — a wall of names hides who is talking about whom */
 const backlinkGroups = computed(() => {
   const groups = new Map<EntityType, LinkedEntity[]>()
@@ -517,6 +520,17 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
             ? 'Click through to walk down the world — kingdom to region to the cave you need.'
             : 'Nothing here yet. Open a place or a map and “Place it” inside this one.'"
         >
+          <template #actions>
+            <UButton
+              v-if="canWrite"
+              label="Add a map"
+              icon="i-lucide-map"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              @click="addMapOpen = true"
+            />
+          </template>
           <div
             v-if="placeContents.maps.length"
             class="mb-3 flex flex-wrap gap-2"
@@ -676,6 +690,14 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
           v-if="isDm"
           v-model:open="playerPreview"
           :entity="entity"
+        />
+
+        <AddMapToPlace
+          v-if="entity.type === 'location'"
+          v-model:open="addMapOpen"
+          :place-id="entity.id"
+          :place-name="entity.name"
+          @added="load"
         />
 
         <ImageLightbox
