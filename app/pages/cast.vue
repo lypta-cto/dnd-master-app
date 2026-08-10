@@ -236,19 +236,8 @@ async function rotate() {
           <DiceRoller />
         </ContentCard>
 
-        <ContentCard
-          title="Cast an entity"
-          icon="i-lucide-venetian-mask"
-          description="Open any NPC or location and press Cast — its portrait lands here."
-        >
-          <UButton
-            label="Browse entities"
-            color="neutral"
-            variant="outline"
-            trailing-icon="i-lucide-arrow-right"
-            to="/entities"
-          />
-        </ContentCard>
+        <!-- Casting an NPC or a place happens from its own page — a card
+           holding one link to "browse entities" was furniture, not a tool -->
       </div>
 
       <!-- Display link -->
