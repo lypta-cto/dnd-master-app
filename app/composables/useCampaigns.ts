@@ -10,6 +10,8 @@ export type CampaignType = 'one_shot' | 'mini' | 'campaign'
  */
 export interface CampaignData {
   campaign_type?: CampaignType
+  /** What the party calls itself — pure flavour, worn on the Party banner */
+  party_name?: string
   system?: string
   player_count?: number
   starting_level?: number

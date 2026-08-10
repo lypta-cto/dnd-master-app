@@ -4,7 +4,7 @@
  * HP is adjustable right here (DM anywhere, players on their own character);
  * everything else links through to the full sheet.
  */
-const { current, isDm } = useCampaigns()
+const { current, isDm, update: updateCampaign, detail } = useCampaigns()
 const { user } = useAuth()
 const entities = useEntities()
 const toast = useToast()
@@ -42,6 +42,91 @@ async function load() {
 }
 
 watch(() => current.value?.id, load, { immediate: true })
+
+/* --- The party's name --------------------------------------------------------
+ * Pure flavour, and that's the point: "The Splintered Crown" reads better on
+ * a banner than "Party". Lives in the campaign's own free-form data, so no
+ * schema had to hear about it.
+ */
+const partyName = ref('')
+const editingName = ref(false)
+const nameDraft = ref('')
+const savingName = ref(false)
+
+watch(() => current.value?.id, async (id) => {
+  partyName.value = ''
+  if (!id) {
+    return
+  }
+  try {
+    const campaign = await detail(id)
+    partyName.value = String(campaign.data?.party_name ?? '')
+  } catch {
+    // The banner falls back to "The party" — nothing worth an error
+  }
+}, { immediate: true })
+
+function startEditingName() {
+  nameDraft.value = partyName.value
+  editingName.value = true
+}
+
+async function saveName() {
+  if (!current.value) {
+    return
+  }
+  savingName.value = true
+  try {
+    const campaign = await detail(current.value.id)
+    const data = { ...(campaign.data ?? {}) }
+    const trimmed = nameDraft.value.trim()
+    if (trimmed) {
+      data.party_name = trimmed
+    } else {
+      delete data.party_name
+    }
+    await updateCampaign(current.value.id, { data })
+    partyName.value = trimmed
+    editingName.value = false
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    savingName.value = false
+  }
+}
+
+/** The glance the banner gives: who's standing, how hurt, what level */
+const bannerStats = computed(() => {
+  if (!characters.value.length) {
+    return null
+  }
+  let currentHp = 0
+  let maxHp = 0
+  let down = 0
+  const levels: number[] = []
+
+  for (const character of characters.value) {
+    const { current: c, max } = hp(character)
+    currentHp += c
+    maxHp += max
+    if (max > 0 && c === 0) {
+      down += 1
+    }
+    const level = Number(character.data.level)
+    if (level) {
+      levels.push(level)
+    }
+  }
+
+  const low = Math.min(...levels)
+  const high = Math.max(...levels)
+  return {
+    members: characters.value.length,
+    level: levels.length ? (low === high ? `Lv ${low}` : `Lv ${low}–${high}`) : null,
+    hp: maxHp > 0 ? `${currentHp}/${maxHp} HP` : null,
+    down
+  }
+})
 
 function canTouch(character: EntitySummary) {
   return isDm.value || character.owner_id === user.value?.id
@@ -168,168 +253,233 @@ function subtitle(character: EntitySummary) {
       />
     </EmptyState>
 
-    <div
-      v-else
-      class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-    >
-      <ContentCard
-        v-for="character in characters"
-        :key="character.id"
-      >
-        <template #header>
-          <NuxtLink
-            :to="`/entities/${character.id}`"
-            class="group flex min-w-0 items-center gap-3"
-          >
-            <UAvatar
-              :src="mediaUrl(character.image_url)"
-              :alt="character.name"
-              :text="character.name.slice(0, 2).toUpperCase()"
-              size="lg"
+    <template v-else>
+      <!-- The banner: the party as a thing with a name, not a list of rows -->
+      <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/10 to-transparent px-5 py-4">
+        <template v-if="!editingName">
+          <h2 class="flex items-center gap-2 text-2xl font-bold text-highlighted">
+            <UIcon
+              name="i-lucide-shield-half"
+              class="size-6 text-primary"
             />
-            <span class="min-w-0">
-              <span class="block truncate font-semibold text-highlighted group-hover:text-primary">
-                {{ character.name }}
-              </span>
-              <span class="block truncate text-xs text-muted">
-                {{ subtitle(character) || 'No class set' }}
-              </span>
-              <span
-                v-if="playerName(character)"
-                class="block truncate text-xs text-dimmed"
-              >
-                played by {{ playerName(character) }}
-              </span>
-            </span>
-          </NuxtLink>
-        </template>
-
-        <template #actions>
-          <UBadge
-            :label="`AC ${character.data.ac ?? '–'}`"
+            {{ partyName || 'The party' }}
+          </h2>
+          <UButton
+            v-if="isDm"
+            icon="i-lucide-pencil"
             color="neutral"
-            variant="subtle"
-            size="sm"
-          />
-          <UBadge
-            v-if="character.data.passive_perception"
-            :label="`PP ${character.data.passive_perception}`"
-            color="neutral"
-            variant="subtle"
-            size="sm"
+            variant="ghost"
+            size="xs"
+            :aria-label="partyName ? 'Rename the party' : 'Name the party'"
+            @click="startEditingName"
           />
         </template>
+        <form
+          v-else
+          class="flex items-center gap-2"
+          @submit.prevent="saveName"
+        >
+          <UInput
+            v-model="nameDraft"
+            placeholder="The Splintered Crown…"
+            size="lg"
+            autofocus
+            class="w-72"
+            @keydown.enter.prevent="saveName"
+            @keydown.esc="editingName = false"
+          />
+          <UButton
+            type="submit"
+            label="Save"
+            size="sm"
+            :loading="savingName"
+          />
+        </form>
 
-        <div class="space-y-3">
-          <!-- HP -->
-          <div>
-            <div class="mb-1 flex items-baseline justify-between text-sm">
-              <span class="text-muted">HP</span>
-              <span class="tabular-nums text-toned">
-                {{ hp(character).current }} / {{ hp(character).max }}
-                <span
-                  v-if="hp(character).temp"
-                  class="text-info"
-                >+{{ hp(character).temp }}</span>
-              </span>
-            </div>
-            <div class="h-2.5 overflow-hidden rounded-full bg-elevated">
-              <div
-                class="h-full rounded-full transition-all duration-300"
-                :class="hpColor(character)"
-                :style="{ width: `${hpPercent(character)}%` }"
-              />
-            </div>
+        <div
+          v-if="bannerStats"
+          class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted"
+        >
+          <span class="tabular-nums">{{ bannerStats.members }} {{ bannerStats.members === 1 ? 'member' : 'members' }}</span>
+          <span
+            v-if="bannerStats.level"
+            class="tabular-nums"
+          >{{ bannerStats.level }}</span>
+          <span
+            v-if="bannerStats.hp"
+            class="tabular-nums"
+          >{{ bannerStats.hp }}</span>
+          <UBadge
+            v-if="bannerStats.down"
+            color="error"
+            variant="subtle"
+            class="animate-pulse rounded-full"
+          >
+            {{ bannerStats.down }} down
+          </UBadge>
+        </div>
+      </div>
 
-            <div
-              v-if="canTouch(character)"
-              class="mt-2 flex items-center gap-1.5"
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ContentCard
+          v-for="character in characters"
+          :key="character.id"
+        >
+          <template #header>
+            <NuxtLink
+              :to="`/entities/${character.id}`"
+              class="group flex min-w-0 items-center gap-3"
             >
-              <UButton
-                v-for="delta in [-5, -1]"
-                :key="delta"
-                :label="String(delta)"
-                size="xs"
-                color="error"
-                variant="soft"
-                :disabled="savingId === character.id"
-                @click="bumpHp(character, delta)"
+              <UAvatar
+                :src="mediaUrl(character.image_url)"
+                :alt="character.name"
+                :text="character.name.slice(0, 2).toUpperCase()"
+                size="lg"
               />
-              <UButton
-                v-for="delta in [1, 5]"
-                :key="delta"
-                :label="`+${delta}`"
-                size="xs"
-                color="success"
-                variant="soft"
-                :disabled="savingId === character.id"
-                @click="bumpHp(character, delta)"
-              />
-              <UIcon
-                v-if="savingId === character.id"
-                name="i-lucide-loader-circle"
-                class="ml-auto size-3.5 animate-spin text-muted"
-              />
-            </div>
-          </div>
+              <span class="min-w-0">
+                <span class="block truncate font-semibold text-highlighted group-hover:text-primary">
+                  {{ character.name }}
+                </span>
+                <span class="block truncate text-xs text-muted">
+                  {{ subtitle(character) || 'No class set' }}
+                </span>
+                <span
+                  v-if="playerName(character)"
+                  class="block truncate text-xs text-dimmed"
+                >
+                  played by {{ playerName(character) }}
+                </span>
+              </span>
+            </NuxtLink>
+          </template>
 
-          <!-- Spell slots left -->
-          <p
-            v-if="slotSummary(character)"
-            class="text-xs tabular-nums text-muted"
-          >
-            Slots: {{ slotSummary(character) }}
-          </p>
-
-          <!-- Death saves, only when it matters -->
-          <div
-            v-if="hp(character).current === 0"
-            class="flex items-center gap-3 text-xs"
-          >
-            <span class="flex items-center gap-1">
-              <span class="text-muted">Saves</span>
-              <span
-                v-for="i in 3"
-                :key="`s${i}`"
-                class="size-2.5 rounded-full border"
-                :class="i <= deathSaves(character).s ? 'border-emerald-500 bg-emerald-500' : 'border-accented'"
-              />
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="text-muted">Fails</span>
-              <span
-                v-for="i in 3"
-                :key="`f${i}`"
-                class="size-2.5 rounded-full border"
-                :class="i <= deathSaves(character).f ? 'border-red-500 bg-red-500' : 'border-accented'"
-              />
-            </span>
-          </div>
-
-          <!-- Conditions -->
-          <div
-            v-if="conditions(character).length || hp(character).current === 0"
-            class="flex flex-wrap gap-1"
-          >
+          <template #actions>
             <UBadge
-              v-if="hp(character).current === 0"
-              label="down"
-              color="error"
-              variant="solid"
-              size="sm"
-            />
-            <UBadge
-              v-for="name in conditions(character)"
-              :key="name"
-              :label="name"
-              color="warning"
+              :label="`AC ${character.data.ac ?? '–'}`"
+              color="neutral"
               variant="subtle"
               size="sm"
-              class="capitalize"
             />
+            <UBadge
+              v-if="character.data.passive_perception"
+              :label="`PP ${character.data.passive_perception}`"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+            />
+          </template>
+
+          <div class="space-y-3">
+            <!-- HP -->
+            <div>
+              <div class="mb-1 flex items-baseline justify-between text-sm">
+                <span class="text-muted">HP</span>
+                <span class="tabular-nums text-toned">
+                  {{ hp(character).current }} / {{ hp(character).max }}
+                  <span
+                    v-if="hp(character).temp"
+                    class="text-info"
+                  >+{{ hp(character).temp }}</span>
+                </span>
+              </div>
+              <div class="h-2.5 overflow-hidden rounded-full bg-elevated">
+                <div
+                  class="h-full rounded-full transition-all duration-300"
+                  :class="hpColor(character)"
+                  :style="{ width: `${hpPercent(character)}%` }"
+                />
+              </div>
+
+              <div
+                v-if="canTouch(character)"
+                class="mt-2 flex items-center gap-1.5"
+              >
+                <UButton
+                  v-for="delta in [-5, -1]"
+                  :key="delta"
+                  :label="String(delta)"
+                  size="xs"
+                  color="error"
+                  variant="soft"
+                  :disabled="savingId === character.id"
+                  @click="bumpHp(character, delta)"
+                />
+                <UButton
+                  v-for="delta in [1, 5]"
+                  :key="delta"
+                  :label="`+${delta}`"
+                  size="xs"
+                  color="success"
+                  variant="soft"
+                  :disabled="savingId === character.id"
+                  @click="bumpHp(character, delta)"
+                />
+                <UIcon
+                  v-if="savingId === character.id"
+                  name="i-lucide-loader-circle"
+                  class="ml-auto size-3.5 animate-spin text-muted"
+                />
+              </div>
+            </div>
+
+            <!-- Spell slots left -->
+            <p
+              v-if="slotSummary(character)"
+              class="text-xs tabular-nums text-muted"
+            >
+              Slots: {{ slotSummary(character) }}
+            </p>
+
+            <!-- Death saves, only when it matters -->
+            <div
+              v-if="hp(character).current === 0"
+              class="flex items-center gap-3 text-xs"
+            >
+              <span class="flex items-center gap-1">
+                <span class="text-muted">Saves</span>
+                <span
+                  v-for="i in 3"
+                  :key="`s${i}`"
+                  class="size-2.5 rounded-full border"
+                  :class="i <= deathSaves(character).s ? 'border-emerald-500 bg-emerald-500' : 'border-accented'"
+                />
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="text-muted">Fails</span>
+                <span
+                  v-for="i in 3"
+                  :key="`f${i}`"
+                  class="size-2.5 rounded-full border"
+                  :class="i <= deathSaves(character).f ? 'border-red-500 bg-red-500' : 'border-accented'"
+                />
+              </span>
+            </div>
+
+            <!-- Conditions -->
+            <div
+              v-if="conditions(character).length || hp(character).current === 0"
+              class="flex flex-wrap gap-1"
+            >
+              <UBadge
+                v-if="hp(character).current === 0"
+                label="down"
+                color="error"
+                variant="solid"
+                size="sm"
+              />
+              <UBadge
+                v-for="name in conditions(character)"
+                :key="name"
+                :label="name"
+                color="warning"
+                variant="subtle"
+                size="sm"
+                class="capitalize"
+              />
+            </div>
           </div>
-        </div>
-      </ContentCard>
-    </div>
+        </ContentCard>
+      </div>
+    </template>
   </AppPage>
 </template>
