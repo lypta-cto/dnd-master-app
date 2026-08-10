@@ -62,8 +62,9 @@ export function useNavigation() {
   const mainNav = computed<NavigationMenuItem[][]>(() => [
     [
       { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
-      { label: 'Party', icon: 'i-lucide-users-round', to: '/party' },
-      link('character')
+      // One home for the characters: every character IS the party — a second
+      // "Characters" list of the same sheets was a duplicate with less on it
+      { label: 'Party', icon: 'i-lucide-users-round', to: '/party' }
     ],
     // Only the DM runs anything — a player has no use for these three
     ...(isDm.value

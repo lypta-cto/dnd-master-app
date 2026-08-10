@@ -131,6 +131,19 @@ function subtitle(character: EntitySummary) {
       { label: 'Party' }
     ]"
   >
+    <!-- This page is the characters' one home now, so making one starts here -->
+    <template
+      v-if="current"
+      #actions
+    >
+      <UButton
+        label="New Character"
+        icon="i-lucide-plus"
+        class="rounded-xl"
+        to="/entities/new?type=character"
+      />
+    </template>
+
     <div
       v-if="loading"
       class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
@@ -146,8 +159,14 @@ function subtitle(character: EntitySummary) {
       v-else-if="!characters.length"
       icon="i-lucide-users-round"
       title="No characters yet"
-      description="Players create their own from the Characters section — each sheet shows up here."
-    />
+      description="Make the first sheet — every character lives here, next to the seat that plays it."
+    >
+      <UButton
+        label="New Character"
+        icon="i-lucide-plus"
+        to="/entities/new?type=character"
+      />
+    </EmptyState>
 
     <div
       v-else

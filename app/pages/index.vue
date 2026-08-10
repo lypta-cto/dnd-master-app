@@ -24,9 +24,13 @@ const activeQuests = computed(() =>
   quests.value.filter(q => (q.data.status ?? 'active') === 'active')
 )
 
-/** Players have no bestiary — don't offer them a row that always reads 0 */
+/** Players have no bestiary — don't offer them a row that always reads 0.
+ * Maps are no longer a category (a map is a location's attribute), and
+ * characters live on the Party page rather than a list of their own. */
 const countTypes = computed(() =>
-  ENTITY_TYPES.filter(type => isDm.value || type.value !== 'monster')
+  ENTITY_TYPES.filter(
+    type => type.value !== 'map' && (isDm.value || type.value !== 'monster')
+  )
 )
 
 async function loadOverview() {
@@ -369,7 +373,7 @@ function sessionLabel(session: EntitySummary) {
           <NuxtLink
             v-for="type in countTypes"
             :key="type.value"
-            :to="`/entities?type=${type.value}`"
+            :to="type.value === 'character' ? '/party' : `/entities?type=${type.value}`"
             class="app-card group flex items-center gap-2.5 p-3 transition-colors hover:border-accented"
           >
             <UIcon
