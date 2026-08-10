@@ -70,6 +70,8 @@ export function useAi() {
       caption?: string | null
       /** Cheap by default; `good` costs roughly four times as much */
       quality?: 'draft' | 'good'
+      /** Draw the place as a top-down map — landmarks, no grid, no lettering */
+      as_map?: boolean
     } = {}
   ) =>
     api.post<EntityImage & { cents: number }>(

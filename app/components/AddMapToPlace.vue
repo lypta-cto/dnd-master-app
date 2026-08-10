@@ -18,9 +18,31 @@ const open = defineModel<boolean>('open', { required: true })
 
 const entities = useEntities()
 const mediaUrl = useMediaUrl()
+const ai = useAi()
 const toast = useToast()
 
 const busy = ref(false)
+
+/**
+ * The map, drawn from what the page already says.
+ *
+ * Same pipeline as illustrating the location, asked for as cartography: a
+ * top-down map with the landmarks the description names, no grid and no
+ * lettering. It lands in the gallery like any picture, then becomes the map.
+ */
+const generating = ref<'draft' | 'good' | null>(null)
+
+async function generateMap(quality: 'draft' | 'good') {
+  generating.value = quality
+  try {
+    const image = await ai.illustrate(props.entity.id, { quality, as_map: true })
+    await setMap(image.url)
+  } catch (error) {
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  } finally {
+    generating.value = null
+  }
+}
 
 const currentMap = computed(() => {
   const url = props.entity.data.map_image_url
@@ -116,6 +138,36 @@ async function onFile(event: Event) {
             @change="onFile"
           >
         </label>
+
+        <USeparator label="or draw it from the description" />
+
+        <div class="flex items-center gap-2">
+          <UButton
+            label="Generate — draft"
+            icon="i-lucide-sparkles"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            class="flex-1 justify-center"
+            :loading="generating === 'draft'"
+            :disabled="!!generating"
+            @click="generateMap('draft')"
+          />
+          <UButton
+            label="Generate — good"
+            icon="i-lucide-sparkles"
+            variant="soft"
+            size="sm"
+            class="flex-1 justify-center"
+            :loading="generating === 'good'"
+            :disabled="!!generating"
+            @click="generateMap('good')"
+          />
+        </div>
+        <p class="text-xs text-dimmed">
+          Top-down map with the landmarks the description mentions — no grid,
+          no lettering. Drawn from the summary and body, so write those first.
+        </p>
 
         <template v-if="gallery.length">
           <USeparator label="or pick from the gallery" />
