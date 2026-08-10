@@ -13,6 +13,24 @@ defineProps<{
 }>()
 
 const data = defineModel<Record<string, unknown>>({ required: true })
+
+/* --- Six scores, one stored string ------------------------------------------
+ * The data keeps "16/12/14/8/10/6" exactly as before; only the typing
+ * changes. Six labelled boxes replace the count-the-slashes single field.
+ */
+const ABILITY_NAMES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
+
+function abilityAt(raw: unknown, index: number): string {
+  return String(raw ?? '').split('/')[index]?.trim() ?? ''
+}
+
+function setAbility(key: string, index: number, value: string) {
+  const parts = ABILITY_NAMES.map((_, i) => abilityAt(data.value[key], i))
+  parts[index] = value.trim()
+  const joined = parts.join('/')
+  // All six empty means the field was cleared, not filled with slashes
+  data.value[key] = parts.some(Boolean) ? joined : undefined
+}
 </script>
 
 <template>
@@ -20,10 +38,30 @@ const data = defineModel<Record<string, unknown>>({ required: true })
     v-for="field in fields"
     :key="field.key"
     :label="field.label"
-    :class="field.long && 'sm:col-span-2'"
+    :class="(field.long || field.abilities) && 'sm:col-span-2'"
   >
+    <div
+      v-if="field.abilities"
+      class="grid max-w-md grid-cols-6 gap-1.5"
+    >
+      <label
+        v-for="(name, index) in ABILITY_NAMES"
+        :key="name"
+        class="flex flex-col gap-0.5"
+      >
+        <span class="text-center text-[10px] font-medium tracking-wide text-dimmed">{{ name }}</span>
+        <UInput
+          type="number"
+          :model-value="abilityAt(data[field.key], index)"
+          size="sm"
+          :aria-label="`${name} score`"
+          :ui="{ base: 'text-center px-1' }"
+          @update:model-value="value => setAbility(field.key, index, String(value ?? ''))"
+        />
+      </label>
+    </div>
     <USelectMenu
-      v-if="field.options"
+      v-else-if="field.options"
       :model-value="(data[field.key] as string | undefined)"
       :items="field.options"
       :placeholder="field.label"
@@ -37,7 +75,7 @@ const data = defineModel<Record<string, unknown>>({ required: true })
       :items="field.suggestions"
       :placeholder="field.placeholder"
       create-item
-      class="w-full"
+      :class="field.short ? 'w-32' : 'w-full'"
       @update:model-value="value => (data[field.key] = value)"
       @create="value => (data[field.key] = value)"
     />

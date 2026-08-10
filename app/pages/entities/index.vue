@@ -89,8 +89,10 @@ async function load() {
       q: applied.value || undefined,
       sort: sort.value,
       page: page.value,
-      // Rows are a third the height of cards, so a page of them is worth more
-      page_size: layout.value === 'list' ? 50 : 24
+      // Rows are a third the height of cards, so a page of them is worth
+      // more. Locations get the whole set at once: they render as a tree,
+      // and a tree with its middle page missing is just wrong lines.
+      page_size: type.value === 'location' ? 200 : layout.value === 'list' ? 50 : 24
     })
 
     if (request === latest) {
@@ -130,8 +132,63 @@ const title = computed(() => meta.value?.plural ?? 'All entities')
  */
 const GROUPABLE: EntityType[] = ['scene', 'encounter', 'location']
 
+/* --- The world as a ladder ---------------------------------------------------
+ * Locations render as the containment tree, biggest first: the kingdom, the
+ * regions in it, the city in the region, the tavern in the city. Siblings
+ * sort by their kind's rung on LOCATION_KINDS, so a plane never files under
+ * its own dungeon alphabetically. Searching flattens back to plain results —
+ * a tree of matches with the trunk missing helps nobody.
+ */
+const locationTree = computed(() => {
+  if (
+    type.value !== 'location'
+    || applied.value
+    || sort.value !== 'name'
+    || layout.value !== 'list'
+    || !pageData.value
+  ) {
+    return null
+  }
+
+  const items = pageData.value.items
+  const ids = new Set(items.map(item => item.id))
+  const children = new Map<string, EntitySummary[]>()
+  const roots: EntitySummary[] = []
+
+  for (const item of items) {
+    // A parent outside this list (another type, or beyond the page cap)
+    // makes the item a root rather than an orphan that never renders
+    if (item.parent && ids.has(item.parent.id)) {
+      children.set(item.parent.id, [...(children.get(item.parent.id) ?? []), item])
+    } else {
+      roots.push(item)
+    }
+  }
+
+  const rung = (entity: EntitySummary) => {
+    const index = LOCATION_KINDS.indexOf(String(entity.data.kind ?? ''))
+    return index === -1 ? LOCATION_KINDS.length : index
+  }
+  const bySize = (a: EntitySummary, b: EntitySummary) =>
+    rung(a) - rung(b) || a.name.localeCompare(b.name)
+
+  const rows: { entity: EntitySummary, depth: number }[] = []
+  const walk = (list: EntitySummary[], depth: number) => {
+    for (const entity of [...list].sort(bySize)) {
+      rows.push({ entity, depth })
+      walk(children.get(entity.id) ?? [], depth + 1)
+    }
+  }
+  walk(roots, 0)
+
+  return rows
+})
+
 const grouped = computed(() => {
   if (!type.value || !GROUPABLE.includes(type.value) || applied.value || !pageData.value) {
+    return null
+  }
+  if (locationTree.value) {
     return null
   }
 
@@ -457,9 +514,41 @@ watch([type, () => current.value?.id], () => {
           </ul>
         </ContentCard>
 
+        <!-- The world, biggest to smallest: each place indented under the
+             one that holds it -->
+        <div
+          v-if="locationTree"
+          class="app-card overflow-hidden p-0"
+        >
+          <div
+            v-for="row in locationTree"
+            :key="row.entity.id"
+            class="flex items-stretch"
+          >
+            <div
+              v-if="row.depth"
+              class="flex shrink-0 items-center justify-end pr-1"
+              :style="{ width: `${row.depth * 1.4}rem` }"
+            >
+              <UIcon
+                name="i-lucide-corner-down-right"
+                class="size-3.5 text-dimmed/60"
+              />
+            </div>
+            <EntityRow
+              :entity="row.entity"
+              :no-visibility="!isDm"
+              :selectable="selecting"
+              :selected="selected.includes(row.entity.id)"
+              class="min-w-0 flex-1"
+              @toggle="toggle"
+            />
+          </div>
+        </div>
+
         <!-- Grouped by place: the same cards, under the world they belong to -->
         <div
-          v-if="grouped"
+          v-else-if="grouped"
           class="space-y-6"
         >
           <section

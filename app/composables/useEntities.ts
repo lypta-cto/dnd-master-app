@@ -202,7 +202,33 @@ export interface TypeField {
   short?: boolean
   /** A sentence — give it a textarea */
   long?: boolean
+  /**
+   * Six ability scores in one data key. One "10/14/12/8/10/6" box made you
+   * count slashes to find WIS; this renders six labelled boxes that read and
+   * write the same joined string, so nothing stored changes shape.
+   */
+  abilities?: boolean
 }
+
+/**
+ * Where a place sits on the ladder of places, biggest first.
+ *
+ * The world is built downward — kingdom, then region, then the city in it,
+ * then the tavern in that — so the dropdown offers kinds in that order and
+ * the locations list uses the same ranking to sort siblings in its tree.
+ */
+export const LOCATION_KINDS = [
+  'plane', 'kingdom', 'region', 'wilderness', 'forest', 'mountains', 'swamp',
+  'island', 'city', 'town', 'village', 'district', 'castle', 'dungeon',
+  'temple', 'tavern', 'shop', 'building'
+]
+
+/** Common CRs offered as you type; anything else is still accepted */
+const CHALLENGE_RATINGS = [
+  '0', '1/8', '1/4', '1/2',
+  ...Array.from({ length: 20 }, (_, index) => String(index + 1)),
+  '21', '22', '23', '24', '30'
+]
 
 /**
  * What kind of thing this is to the person filling the form in.
@@ -282,14 +308,11 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'voice', label: 'Voice & manner', placeholder: 'How to play them: accent, tics, mood', long: true }
   ],
   location: [
-    // Region first, because it's the outermost thing you pick when building a
-    // world downward — and the one a town needs to point at.
-    //
-    // There used to be a free-text "Region" field here too. Containment says
-    // the same thing now, and better: it links, it nests, and it draws a
-    // breadcrumb. Two ways to record where something is would have drifted
-    // apart the first time someone used one and not the other.
-    { key: 'kind', label: 'Kind', options: ['region', 'city', 'town', 'village', 'dungeon', 'wilderness', 'building', 'plane'], short: true }
+    // The kinds run biggest-first, because that's the order a world is built
+    // in: kingdom before region, region before the city, the city before its
+    // tavern. Containment ("In the world") records which one holds which —
+    // the kind just says what rung of that ladder this place is.
+    { key: 'kind', label: 'Kind', options: LOCATION_KINDS, short: true }
   ],
   item: [
     { key: 'rarity', label: 'Rarity', options: ['common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'], short: true },
@@ -308,11 +331,11 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
   map: [],
   monster: [
     { key: 'kind', label: 'Kind', options: ['aberration', 'beast', 'celestial', 'construct', 'dragon', 'elemental', 'fey', 'fiend', 'giant', 'humanoid', 'monstrosity', 'ooze', 'plant', 'undead'] },
-    { key: 'cr', label: 'CR', placeholder: '1/4, 5, 13…', short: true },
+    { key: 'cr', label: 'CR', placeholder: '1/4', suggestions: CHALLENGE_RATINGS, short: true },
     { key: 'ac', label: 'AC', placeholder: '15', short: true },
     { key: 'hp', label: 'HP', placeholder: '45', short: true },
     { key: 'speed', label: 'Speed', placeholder: '30 ft., fly 60 ft.' },
-    { key: 'abilities', label: 'STR/DEX/CON/INT/WIS/CHA', placeholder: '16/12/14/8/10/6' },
+    { key: 'abilities', label: 'Abilities', abilities: true },
     // What the tracker shows on this monster's turn — write the to-hit and
     // the damage dice and the fight never stops for a rulebook
     { key: 'attacks', label: 'Attacks & damage', placeholder: 'Scimitar +4 to hit, 1d6+2 slashing. Shortbow +4, 1d6+2 piercing.', long: true }
