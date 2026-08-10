@@ -46,11 +46,62 @@ const dmNotes = computed(() => (entity.value?.data.dm_notes as string | undefine
 const playersThink = computed(() => (entity.value?.data.dm_players_think as string | undefined) ?? '')
 const playerPreview = ref(false)
 
+/**
+ * What stands inside this place — the way down the world.
+ *
+ * The breadcrumb above walks up (cave → city → kingdom); this walks down.
+ * Children arrive as backlinks with the located_in relation, so no extra
+ * request is needed. Maps come first with their pictures — a place's map is
+ * the thing you reach for mid-session. Places group by kind in ladder order,
+ * so a kingdom with too many regions reads as "Regions (14)" with a scrolling
+ * shelf rather than an avalanche; everything else groups by type.
+ */
+const placeContents = computed(() => {
+  if (!entity.value || entity.value.type !== 'location') {
+    return null
+  }
+
+  const inside = entity.value.backlinks.filter(link => link.relation === 'located_in')
+  const maps = inside.filter(link => link.type === 'map')
+  const places = inside.filter(link => link.type === 'location')
+  const rest = inside.filter(link => link.type !== 'map' && link.type !== 'location')
+
+  const rung = (link: LinkedEntity) => {
+    const index = LOCATION_KINDS.indexOf(String(link.data.kind ?? ''))
+    return index === -1 ? LOCATION_KINDS.length : index
+  }
+
+  const byKind = new Map<string, LinkedEntity[]>()
+  for (const place of [...places].sort((a, b) => rung(a) - rung(b) || a.name.localeCompare(b.name))) {
+    const kind = String(place.data.kind ?? 'places')
+    byKind.set(kind, [...(byKind.get(kind) ?? []), place])
+  }
+
+  const byType = new Map<EntityType, LinkedEntity[]>()
+  for (const link of [...rest].sort((a, b) => a.name.localeCompare(b.name))) {
+    byType.set(link.type, [...(byType.get(link.type) ?? []), link])
+  }
+
+  return {
+    total: inside.length,
+    maps,
+    placeGroups: [...byKind.entries()].map(([kind, links]) => ({ kind, links })),
+    restGroups: [...byType.entries()]
+      .map(([type, links]) => ({ type, meta: entityTypeMeta(type), links }))
+      .sort((a, b) => b.links.length - a.links.length)
+  }
+})
+
 /** Backlinks grouped by type — a wall of names hides who is talking about whom */
 const backlinkGroups = computed(() => {
   const groups = new Map<EntityType, LinkedEntity[]>()
 
   for (const link of entity.value?.backlinks ?? []) {
+    // Children of a place live in its own card; repeating them here would
+    // say the same thing twice in a worse place
+    if (placeContents.value && link.relation === 'located_in') {
+      continue
+    }
     groups.set(link.type, [...(groups.get(link.type) ?? []), link])
   }
 
@@ -448,12 +499,105 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
 
         <!-- Only for the things a world is actually built out of. A magic
              sword has an owner, not a location it belongs inside. -->
+        <!-- Maps place too: the cave's floor plan belongs inside the cave,
+           where the place page can offer it back with a thumbnail -->
         <EntityPlacement
-          v-if="['location', 'scene', 'encounter'].includes(entity.type)"
+          v-if="['location', 'scene', 'encounter', 'map'].includes(entity.type)"
           :entity="entity"
           :can-edit="isDm"
           @changed="load"
         />
+
+        <!-- The way down: what stands inside this place, maps first -->
+        <ContentCard
+          v-if="placeContents"
+          title="In this place"
+          icon="i-lucide-map-pinned"
+          :description="placeContents.total
+            ? 'Click through to walk down the world — kingdom to region to the cave you need.'
+            : 'Nothing here yet. Open a place or a map and “Place it” inside this one.'"
+        >
+          <div
+            v-if="placeContents.maps.length"
+            class="mb-3 flex flex-wrap gap-2"
+          >
+            <NuxtLink
+              v-for="map in placeContents.maps"
+              :key="map.id"
+              :to="`/entities/${map.id}`"
+              class="group w-36"
+            >
+              <img
+                v-if="map.image_url"
+                :src="mediaUrl(map.image_url)!"
+                :alt="map.name"
+                class="h-20 w-36 rounded-lg border border-default object-cover transition-colors group-hover:border-primary/60"
+              >
+              <div
+                v-else
+                class="flex h-20 w-36 items-center justify-center rounded-lg border border-default"
+              >
+                <UIcon
+                  name="i-lucide-map"
+                  class="size-6 text-dimmed"
+                />
+              </div>
+              <p class="mt-1 truncate text-xs font-medium text-highlighted group-hover:text-primary">
+                {{ map.name }}
+              </p>
+            </NuxtLink>
+          </div>
+
+          <div
+            v-for="group in placeContents.placeGroups"
+            :key="group.kind"
+            class="mb-2 last:mb-0"
+          >
+            <p class="mb-1 text-xs font-medium tracking-wide text-dimmed uppercase">
+              {{ group.kind }}
+              <span class="tabular-nums">{{ group.links.length > 1 ? group.links.length : '' }}</span>
+            </p>
+            <div class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+              <UButton
+                v-for="place in group.links"
+                :key="place.id"
+                :label="place.name"
+                icon="i-lucide-map-pin"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                :to="`/entities/${place.id}`"
+              />
+            </div>
+          </div>
+
+          <div
+            v-for="group in placeContents.restGroups"
+            :key="group.type"
+            class="mb-2 last:mb-0"
+          >
+            <p class="mb-1 flex items-center gap-1.5 text-xs font-medium tracking-wide text-dimmed uppercase">
+              <UIcon
+                :name="group.meta.icon"
+                class="size-3.5"
+              />
+              {{ group.links.length > 1 ? group.meta.plural : group.meta.label }}
+              <span class="tabular-nums">{{ group.links.length > 1 ? group.links.length : '' }}</span>
+            </p>
+            <div class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+              <UButton
+                v-for="link in group.links"
+                :key="link.id"
+                :label="link.name"
+                :icon="group.meta.icon"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                :to="`/entities/${link.id}`"
+              />
+            </div>
+          </div>
+        </ContentCard>
 
         <EncounterPrep
           v-if="entity.type === 'encounter'"

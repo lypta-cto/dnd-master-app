@@ -29,6 +29,13 @@ const parent = computed(
 
 /** What sits inside this, split so places and scenes don't share a list */
 const contents = computed(() => {
+  // A location's contents live in the page's own "In this place" card, with
+  // maps and grouping this footnote never had — listing them here too would
+  // say it twice. Scenes and encounters keep the inline version.
+  if (props.entity.type === 'location') {
+    return { places: [], happenings: [] }
+  }
+
   const inside = props.entity.backlinks.filter(link => link.relation === 'located_in')
   return {
     places: inside.filter(item => item.type === 'location'),
