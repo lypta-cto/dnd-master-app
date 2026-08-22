@@ -131,7 +131,9 @@ const title = computed(() => meta.value?.plural ?? 'All entities')
  * narrowing the list: a search result should be the matches, in one list, not
  * matches scattered across headings.
  */
-const GROUPABLE: EntityType[] = ['scene', 'encounter', 'location']
+// Scenes left this list: an evening runs in order, and grouping its scenes
+// by geography hid the one thing that matters — what comes next
+const GROUPABLE: EntityType[] = ['encounter', 'location']
 
 /* --- The world explorer ------------------------------------------------------
  * Locations don't render as a list at all: you walk them. Open Locations and
@@ -181,6 +183,15 @@ const standingIn = computed(() => {
 function stepInto(id: string | null) {
   router.push({ query: { ...route.query, in: id || undefined } })
 }
+
+/** Scenes in play order whenever the default sort is on */
+const listItems = computed(() => {
+  const items = pageData.value?.items ?? []
+  if (type.value === 'scene' && sort.value === 'name' && !applied.value) {
+    return sortScenes(items)
+  }
+  return items
+})
 
 const explorer = computed(() => {
   if (type.value !== 'location' || applied.value || !pageData.value) {
@@ -852,7 +863,7 @@ watch([type, () => current.value?.id], () => {
           class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
         >
           <EntityCard
-            v-for="entity in pageData.items"
+            v-for="entity in listItems"
             :key="entity.id"
             :entity="entity"
             :no-visibility="!isDm"
@@ -867,7 +878,7 @@ watch([type, () => current.value?.id], () => {
           class="app-card overflow-hidden p-0"
         >
           <EntityRow
-            v-for="entity in pageData.items"
+            v-for="entity in listItems"
             :key="entity.id"
             :entity="entity"
             :no-visibility="!isDm"

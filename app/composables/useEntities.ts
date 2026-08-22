@@ -391,6 +391,8 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'reward', label: 'Reward', placeholder: 'What is promised' }
   ],
   scene: [
+    // The evening has an order; geography doesn't run a session
+    { key: 'order', label: 'Order', placeholder: '1', short: true },
     { key: 'kind', label: 'Kind', options: ['roleplay', 'investigation', 'combat', 'travel', 'downtime'], short: true },
     { key: 'status', label: 'Status', options: ['planned', 'played', 'skipped'], short: true },
     { key: 'purpose', label: 'Purpose', placeholder: 'Why this scene exists — what it moves', long: true },
@@ -409,6 +411,20 @@ export const TYPE_FIELDS: Record<EntityType, TypeField[]> = {
     { key: 'weight', label: 'Weight', options: ['essential', 'supporting', 'flavour'], short: true },
     { key: 'difficulty', label: 'Difficulty', placeholder: 'DC 13 Investigation, or "ask anyone in the inn"', short: true }
   ]
+}
+
+/**
+ * Scenes in the order the evening plays them.
+ *
+ * `data.order` first, name as the tie-break — so "Scena 10" doesn't file
+ * itself between 1 and 2 the way alphabet insists it should.
+ */
+export function sortScenes<T extends { name: string, data: Record<string, unknown> }>(scenes: T[]): T[] {
+  const orderOf = (scene: T) => {
+    const raw = Number(scene.data.order)
+    return Number.isFinite(raw) && raw > 0 ? raw : 9999
+  }
+  return [...scenes].sort((a, b) => orderOf(a) - orderOf(b) || a.name.localeCompare(b.name))
 }
 
 /** Sessions sorted newest-first by number, then date, then creation */

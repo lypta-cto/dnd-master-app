@@ -56,7 +56,7 @@ async function load() {
     ])
 
     state.value = runState
-    scenes.value = scenePage.items
+    scenes.value = sortScenes(scenePage.items)
     clues.value = cluePage.items
     sessions.value = sortSessions(sessionPage.items)
     roster.value = seats
