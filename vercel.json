@@ -4,6 +4,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://dnd-master-app-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://dnd-master-app-backend.onrender.com/uploads/:path*"
     }
   ]
 }
