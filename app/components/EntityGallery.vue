@@ -37,24 +37,37 @@ onMounted(async () => {
  * tiers is much smaller than the difference a good prompt makes.
  */
 const QUALITIES = [
-  // Coins, because that's the unit the purse in the top bar counts down in.
-  // Quoting cents here and coins there made the DM do the conversion.
-  { value: 'draft' as const, label: 'Draft', hint: '~24 coins' },
-  { value: 'good' as const, label: 'Good', hint: '~87 coins, richer' }
+  { value: 'draft' as const, label: 'Draft' },
+  { value: 'good' as const, label: 'Good' }
+]
+
+/**
+ * Wide leads because everything downstream is widescreen — the thumbnails,
+ * the cover crop, the TV the table casts to. The wide canvas costs about
+ * half as much again, which is why each shape quotes its own price.
+ * Coins, because that's the unit the purse in the top bar counts down in —
+ * quoting cents here and coins there made the DM do the conversion.
+ */
+const ASPECTS = [
+  { value: '16:9' as const, label: 'Wide 16:9', hints: { draft: '~36 coins', good: '~130 coins, richer' } },
+  { value: '1:1' as const, label: 'Square 1:1', hints: { draft: '~24 coins', good: '~87 coins, richer' } }
 ]
 
 const illustrateMenu = computed(() =>
-  QUALITIES.map(quality => ({
-    label: `${quality.label} — ${quality.hint}`,
-    icon: 'i-lucide-sparkles',
-    onSelect: () => illustrate(quality.value)
-  }))
+  ASPECTS.map(aspect => [
+    { type: 'label' as const, label: aspect.label },
+    ...QUALITIES.map(quality => ({
+      label: `${quality.label} — ${aspect.hints[quality.value]}`,
+      icon: 'i-lucide-sparkles',
+      onSelect: () => illustrate(quality.value, aspect.value)
+    }))
+  ])
 )
 
-async function illustrate(quality: 'draft' | 'good') {
+async function illustrate(quality: 'draft' | 'good', aspect: '16:9' | '1:1') {
   illustrating.value = true
   try {
-    const image = await ai.illustrate(props.entity.id, { quality })
+    const image = await ai.illustrate(props.entity.id, { quality, aspect })
     gallery.value = [...gallery.value, image]
 
     if (!props.entity.image_url) {

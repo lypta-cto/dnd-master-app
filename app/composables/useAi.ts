@@ -72,6 +72,8 @@ export function useAi() {
       quality?: 'draft' | 'good'
       /** Draw the place as a top-down map — landmarks, no grid, no lettering */
       as_map?: boolean
+      /** Widescreen by default — thumbnails, covers and the cast TV are all 16:9 */
+      aspect?: '16:9' | '1:1'
     } = {}
   ) =>
     api.post<EntityImage & { cents: number }>(

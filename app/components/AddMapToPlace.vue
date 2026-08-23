@@ -32,10 +32,24 @@ const busy = ref(false)
  */
 const generating = ref<'draft' | 'good' | null>(null)
 
+/**
+ * Wide by default — the board and the cast TV are 16:9. Square remains for
+ * dungeons that go as deep as they go wide.
+ */
+const aspect = ref<'16:9' | '1:1'>('16:9')
+const ASPECT_CHOICES = [
+  { value: '16:9' as const, label: 'Wide 16:9' },
+  { value: '1:1' as const, label: 'Square 1:1' }
+]
+
 async function generateMap(quality: 'draft' | 'good') {
   generating.value = quality
   try {
-    const image = await ai.illustrate(props.entity.id, { quality, as_map: true })
+    const image = await ai.illustrate(props.entity.id, {
+      quality,
+      as_map: true,
+      aspect: aspect.value
+    })
     await setMap(image.url)
   } catch (error) {
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
@@ -140,6 +154,19 @@ async function onFile(event: Event) {
         </label>
 
         <USeparator label="or draw it from the description" />
+
+        <div class="flex items-center justify-center gap-1">
+          <UButton
+            v-for="choice in ASPECT_CHOICES"
+            :key="choice.value"
+            :label="choice.label"
+            size="xs"
+            color="neutral"
+            :variant="aspect === choice.value ? 'solid' : 'ghost'"
+            :disabled="!!generating"
+            @click="aspect = choice.value"
+          />
+        </div>
 
         <div class="flex items-center gap-2">
           <UButton
