@@ -1,8 +1,19 @@
+/** One look the campaign's pictures can be drawn in */
+export interface ArtStyle {
+  value: string
+  label: string
+  hint: string
+}
+
 export interface AiStatus {
   /** Drafting prose */
   text: boolean
   /** Drawing what the page already says */
   images: boolean
+  /** Sent by the API, not listed here: the prompts live in the service */
+  styles: ArtStyle[]
+  /** What this campaign draws in now */
+  style: string
 }
 
 export interface CoinEntry {
@@ -74,6 +85,8 @@ export function useAi() {
       as_map?: boolean
       /** Widescreen by default — thumbnails, covers and the cast TV are all 16:9 */
       aspect?: '16:9' | '1:1'
+      /** Left out, the campaign's own look applies */
+      style?: string
     } = {}
   ) =>
     api.post<EntityImage & { cents: number }>(

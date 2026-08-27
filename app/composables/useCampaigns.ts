@@ -12,6 +12,13 @@ export interface CampaignData {
   campaign_type?: CampaignType
   /** What the party calls itself — pure flavour, worn on the Party banner */
   party_name?: string
+  /**
+   * The look every generated picture in this campaign is drawn in.
+   *
+   * Chosen once rather than per click: a gallery where each portrait was
+   * drawn in a different style reads as a mistake, not as variety.
+   */
+  art_style?: string
   system?: string
   player_count?: number
   starting_level?: number

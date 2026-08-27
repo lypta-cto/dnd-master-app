@@ -17,19 +17,73 @@ const mediaUrl = useMediaUrl()
 
 /* Drawing from the page, when a key is configured */
 const ai = useAi()
+const campaigns = useCampaigns()
 const aiImages = ref(false)
 const illustrating = ref(false)
+
+/**
+ * The look, chosen for the campaign rather than for the click.
+ *
+ * A gallery where every portrait came out in a different style reads as a
+ * mistake rather than as variety, so the choice is stored on the campaign and
+ * every picture after it matches. The list comes from the API because the
+ * prompts live there — a style added in the service shows up here on its own.
+ */
+const artStyles = ref<ArtStyle[]>([])
+const artStyle = ref('rulebook')
 
 onMounted(async () => {
   if (!isDm.value) {
     return
   }
   try {
-    aiImages.value = (await ai.status()).images
+    const status = await ai.status()
+    aiImages.value = status.images
+    artStyles.value = status.styles
+    artStyle.value = status.style
   } catch {
     aiImages.value = false
   }
 })
+
+const currentStyle = computed(() =>
+  artStyles.value.find(style => style.value === artStyle.value)
+)
+
+/** Remembered on the campaign, so the next picture and the next session match */
+async function pickStyle(value: string) {
+  const campaign = campaigns.current.value
+  if (!campaign) {
+    return
+  }
+
+  const previous = artStyle.value
+  artStyle.value = value
+
+  try {
+    await campaigns.update(campaign.id, {
+      data: { ...campaign.data, art_style: value }
+    })
+    toast.add({
+      title: `Pictures now drawn in “${artStyles.value.find(s => s.value === value)?.label}”`,
+      icon: 'i-lucide-palette',
+      color: 'success'
+    })
+  } catch (error) {
+    artStyle.value = previous
+    toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
+  }
+}
+
+const styleMenu = computed(() => [
+  [{ type: 'label' as const, label: 'Every picture in this campaign' }],
+  artStyles.value.map(style => ({
+    label: style.label,
+    // The result, not the technique — nobody picks art by hearing "cel-shaded"
+    icon: style.value === artStyle.value ? 'i-lucide-check' : 'i-lucide-palette',
+    onSelect: () => pickStyle(style.value)
+  }))
+])
 
 /**
  * Two price points, because the DM is spending real money a cent at a time.
@@ -314,6 +368,21 @@ async function removeOne(image: EntityImage) {
           size="sm"
           @click="pickFocus"
         />
+      </UTooltip>
+      <UTooltip
+        v-if="aiImages"
+        :text="currentStyle ? currentStyle.hint : 'The look every picture is drawn in'"
+      >
+        <UDropdownMenu :items="styleMenu">
+          <UButton
+            :label="currentStyle?.label ?? 'Style'"
+            icon="i-lucide-palette"
+            trailing-icon="i-lucide-chevron-down"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+          />
+        </UDropdownMenu>
       </UTooltip>
       <UDropdownMenu
         v-if="aiImages"
