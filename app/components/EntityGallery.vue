@@ -31,6 +31,8 @@ const illustrating = ref(false)
  */
 const artStyles = ref<ArtStyle[]>([])
 const artStyle = ref('rulebook')
+const providers = ref<ImageProvider[]>([])
+const provider = ref('openai')
 
 onMounted(async () => {
   if (!isDm.value) {
@@ -41,6 +43,8 @@ onMounted(async () => {
     aiImages.value = status.images
     artStyles.value = status.styles
     artStyle.value = status.style
+    providers.value = status.providers
+    provider.value = status.provider
   } catch {
     aiImages.value = false
   }
@@ -50,38 +54,63 @@ const currentStyle = computed(() =>
   artStyles.value.find(style => style.value === artStyle.value)
 )
 
-/** Remembered on the campaign, so the next picture and the next session match */
-async function pickStyle(value: string) {
+/**
+ * Both choices live on the campaign, so the next picture and the next session
+ * match. Written optimistically and rolled back on failure — the menu closes
+ * on click, and a tick that waits for the server reads as a dead control.
+ */
+async function remember(patch: Partial<CampaignData>, said: string, rollback: () => void) {
   const campaign = campaigns.current.value
   if (!campaign) {
     return
   }
 
-  const previous = artStyle.value
-  artStyle.value = value
-
   try {
-    await campaigns.update(campaign.id, {
-      data: { ...campaign.data, art_style: value }
-    })
-    toast.add({
-      title: `Pictures now drawn in “${artStyles.value.find(s => s.value === value)?.label}”`,
-      icon: 'i-lucide-palette',
-      color: 'success'
-    })
+    await campaigns.update(campaign.id, { data: { ...campaign.data, ...patch } })
+    toast.add({ title: said, icon: 'i-lucide-palette', color: 'success' })
   } catch (error) {
-    artStyle.value = previous
+    rollback()
     toast.add({ title: apiErrorMessage(error), icon: 'i-lucide-circle-alert', color: 'error' })
   }
 }
 
+function pickStyle(value: string) {
+  const previous = artStyle.value
+  artStyle.value = value
+  const label = artStyles.value.find(style => style.value === value)?.label
+  return remember({ art_style: value }, `Pictures now drawn in “${label}”`, () => {
+    artStyle.value = previous
+  })
+}
+
+function pickProvider(value: string) {
+  const previous = provider.value
+  provider.value = value
+  const label = providers.value.find(who => who.value === value)?.label
+  return remember({ image_provider: value }, `Pictures now drawn by ${label}`, () => {
+    provider.value = previous
+  })
+}
+
+/**
+ * One menu, two decisions. They were nearly two buttons, which put three
+ * controls in a row above a gallery that might hold nothing — and both are
+ * set once a campaign, not per click.
+ */
 const styleMenu = computed(() => [
-  [{ type: 'label' as const, label: 'Every picture in this campaign' }],
+  [{ type: 'label' as const, label: 'Style' }],
   artStyles.value.map(style => ({
     label: style.label,
     // The result, not the technique — nobody picks art by hearing "cel-shaded"
     icon: style.value === artStyle.value ? 'i-lucide-check' : 'i-lucide-palette',
     onSelect: () => pickStyle(style.value)
+  })),
+  [{ type: 'label' as const, label: 'Drawn by' }],
+  providers.value.map(who => ({
+    label: who.available ? who.label : `${who.label} — no key`,
+    icon: who.value === provider.value ? 'i-lucide-check' : 'i-lucide-sparkles',
+    disabled: !who.available,
+    onSelect: () => pickProvider(who.value)
   }))
 ])
 

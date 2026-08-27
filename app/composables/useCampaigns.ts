@@ -19,6 +19,8 @@ export interface CampaignData {
    * drawn in a different style reads as a mistake, not as variety.
    */
   art_style?: string
+  /** Which service draws them — they differ more in fidelity than in price */
+  image_provider?: string
   system?: string
   player_count?: number
   starting_level?: number

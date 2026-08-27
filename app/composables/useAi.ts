@@ -5,6 +5,14 @@ export interface ArtStyle {
   hint: string
 }
 
+/** Who draws. Listed even when unavailable — a missing option looks like a bug */
+export interface ImageProvider {
+  value: string
+  label: string
+  hint: string
+  available: boolean
+}
+
 export interface AiStatus {
   /** Drafting prose */
   text: boolean
@@ -14,6 +22,9 @@ export interface AiStatus {
   styles: ArtStyle[]
   /** What this campaign draws in now */
   style: string
+  providers: ImageProvider[]
+  /** Who draws for this campaign */
+  provider: string
 }
 
 export interface CoinEntry {
@@ -87,6 +98,8 @@ export function useAi() {
       aspect?: '16:9' | '1:1'
       /** Left out, the campaign's own look applies */
       style?: string
+      /** Left out, the campaign's own provider draws */
+      provider?: string
     } = {}
   ) =>
     api.post<EntityImage & { cents: number }>(
